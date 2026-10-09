@@ -1,56 +1,45 @@
-# DSH Snake
+# dsh-snake
 
-给 DeepSeek Harness 做了个贪吃蛇，主角是吃白饭的大肥鱼。等 AI 干活的时候，顺手给她喂两碗。
+给吃白饭的大肥鱼开饭。
 
-饭管够，别吃到自己就行。
+DeepSeek Harness 桌面版输入框上面的一块点阵贪吃蛇。蛇头是大肥鱼，食物是 🍚。她本来就在输入框旁边待着，现在好歹有正经事干了。
 
-![贪吃蛇](assets/preview.png)
+![贪吃蛇棋盘，就长这样](assets/preview.png)
 
-截图来自独立页面，只展示插件实际渲染的棋盘。
+## 玩
 
-## 安装
+点棋盘开始。方向键或 WASD 转向，空格暂停，Esc 退出。棋盘按住能拖走，右上角减号收起来。
 
-需要 Node.js 20 或更新版本，兼容 DeepSeek Harness 桌面版 `0.2.0-rc.2`。
+吃到米饭长一节，撞到自己重来。她嘴硬，但不记仇。
 
-安装、更新或卸载前退出应用，完成后重新打开。
+输入框上方那个小头像就是入口，鼠标放上去她会说开饭啦。
 
-从源码安装：
+## 装
+
+[Releases](https://github.com/songyu00yo/dsh-snake/releases/latest) 里有最新安装包。
+
+想从源码装的话，跑这三行。
 
 ```sh
-git clone https://github.com/songyu00yo/dsh-snake.git
-cd dsh-snake
-npm ci
+npm install
 npm run build
 npm run install:desktop
 ```
 
-也可以下载 [ZIP 安装包](https://github.com/songyu00yo/dsh-snake/releases/latest)。解压后在 `dsh-snake` 目录运行 `npm run install:desktop`，不用安装开发依赖。
+Node 20 起步。安装脚本把插件拷进 `~/.dsh`，改桌面版 profile，动手前先备份原文件。卸载跑 `npm run uninstall:desktop`。装完重启 DeepSeek Harness。
 
-## 操作
+## 兼容
 
-点 DS 娘头像展开，再点棋盘开始。AI 工作时不会自动展开。
+就一个目标，DeepSeek Harness 桌面版 0.2.0-rc.2。版本对不上别硬上，接口会变。
 
-方向键或 WASD 转向，空格暂停或继续，Esc 释放焦点。能穿墙，撞到自己就结束，按方向键重开。
+## 借来的东西
 
-拖顶边移动，点右上角收起。点回聊天输入框，游戏会暂停。
+液态玻璃用的是 [shuding/liquid-glass](https://github.com/shuding/liquid-glass) 的位移图做法，MIT。
 
-## 更新与卸载
+头像是 YunYueSama 的[大肥鱼项目](https://github.com/YunYueSama/codex-deepseek-pet)，按上游署名许可使用，细节见 [ASSETS.md](ASSETS.md)。
 
-源码更新：
+米饭走系统 emoji，没夹带额外的字体和图片。
 
-```sh
-git pull --ff-only
-npm ci
-npm run build
-npm run install:desktop
-```
+本项目 MIT，全文在 [LICENSE](LICENSE)。
 
-安装包更新：下载新 ZIP，解压后运行 `npm run install:desktop`。
-
-卸载用 `npm run uninstall:desktop`。脚本修改前会备份配置和旧插件，备份位置会打印出来。
-
-## 许可
-
-代码采用 [MIT](LICENSE)。头像来自 YunYueSama 的 [codex-deepseek-pet](https://github.com/YunYueSama/codex-deepseek-pet)，适用上游署名许可。
-
-液态玻璃来自 Shu Ding 的 [liquid-glass](https://github.com/shuding/liquid-glass)，采用 MIT 许可。米饭使用系统 emoji。详细来源和许可见 [ASSETS.md](ASSETS.md)。
+跟 DeepSeek 官方没关系，自己玩的。v0.2.1 已经发布，我验收过了，能用。
