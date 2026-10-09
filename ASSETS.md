@@ -15,3 +15,13 @@
 ## 米饭
 
 游戏绘制 Unicode 字符 🍚，使用操作系统的 emoji 字体，不附带米饭图片或字体文件。不同系统的外观可能略有差异。
+
+## 液态玻璃算法
+
+- 作者：Shu Ding。
+- 仓库：[shuding/liquid-glass](https://github.com/shuding/liquid-glass)。
+- 来源提交：`a2d2e847f793430e3409a52927af815a23f4d372`。
+- 来源文件：`liquid-glass.js`。
+- 本地实现：`glass.ts`。
+- 处理方式：移植圆角距离场和 SVG 位移图技术。折射限制在外沿 12 px，最大位移 6 px。仅尺寸变化时生成位移图。
+- 许可：MIT，完整文本见 [LICENSE-liquid-glass.txt](assets/LICENSE-liquid-glass.txt)。
