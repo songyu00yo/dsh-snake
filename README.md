@@ -29,8 +29,7 @@ Node 20 起步。安装脚本把插件拷进 `~/.dsh`，改桌面版 profile，�
 
 ## 兼容
 
-就一个目标，DeepSeek Harness 桌面版 0.2.0-rc.2。版本对不上别硬上，接口会变。
-
+DeepSeek Harness 桌面版 0.2.0-rc.2
 ## 借来的东西
 
 液态玻璃用的是 [shuding/liquid-glass](https://github.com/shuding/liquid-glass) 的位移图做法，MIT。
