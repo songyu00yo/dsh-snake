@@ -1,0 +1,9 @@
+{
+  "name": "dsh-snake", "version": "0.1.0", "description": "融入 DeepSeek Harness 聊天界面的贪吃蛇小游戏", "type": "module", "license": "MIT",
+  "repository": {"type":"git","url":"https://github.com/songyu00yo/dsh-snake.git"},
+  "main": "index.js", "exports": {".":"./index.js","./client":"./dist/client.js","./package.json":"./package.json"},
+  "files": ["index.js","engine.js","client.js","dist","assets","scripts","cordis.patch.yml","README.md","LICENSE","ASSETS.md"],
+  "scripts": {"build":"node scripts/build.mjs","test":"node --test","check":"node --check engine.js && node --check client.js && node --check dist/client.js","install:desktop":"node scripts/profile.mjs install","uninstall:desktop":"node scripts/profile.mjs uninstall"},
+  "engines":{"node":">=20"},
+  "dsh":{"manifestVersion":1,"bundle":{"patch":"./cordis.patch.yml"},"client":{"platform":"web","inject":["@deepseek-ai/dsh-client-ui-conversation","@deepseek-ai/dsh-client-ui-session"],"external":["react"]}}
+}
