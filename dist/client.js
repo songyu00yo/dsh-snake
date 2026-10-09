@@ -15,7 +15,7 @@ var SnakeEngine;
         const width = Math.floor(Math.min(widthLimit, Math.max(0, area.width - 32), bottom * SnakeEngine.COLS / SnakeEngine.ROWS)), height = width * SnakeEngine.ROWS / SnakeEngine.COLS;
         return { width, height, bottom,
             position: clampPosition(position || { x: input.right - area.left - width, y: bottom - height }, area.width, bottom, width, height),
-            entry: clampPosition({ x: input.right - area.left - 48, y: input.top - area.top - 40 }, area.width, area.height, 48, 32) };
+            entry: clampPosition({ x: input.right - area.left - 56, y: input.top - area.top - 52 }, area.width, area.height, 56, 44) };
     }
     SnakeEngine.aboveInput = aboveInput;
     function foodFor(snake, random = Math.random) {
@@ -83,19 +83,7 @@ var SnakeEngine;
         if (working === game.working)
             return;
         game.working = working;
-        if (working) {
-            if (!game.open)
-                game.played = false;
-            game.open = true;
-            game.finished = false;
-        }
-        else {
-            game.finished = true;
-            if (!game.played) {
-                game.open = false;
-                pause(game);
-            }
-        }
+        game.finished = !working;
     }
     SnakeEngine.workChanged = workChanged;
 })(SnakeEngine || (SnakeEngine = {}));
@@ -188,10 +176,17 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             const [focused, setFocused] = React.useState(false);
             const [entranceActive, setEntranceActive] = React.useState(false);
             const [opening, setOpening] = React.useState(false);
+            const [closing, setClosing] = React.useState(false);
             const [tap, setTap] = React.useState(null);
             const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            React.useEffect(() => { setOpening(false); setTap(null); setFocused(false); setEntranceActive(false); }, [game]);
+            React.useEffect(() => { setOpening(false); setClosing(false); setTap(null); setFocused(false); setEntranceActive(false); }, [game]);
             React.useEffect(() => { workChanged(game, working); refresh(); }, [game, working]);
+            React.useEffect(() => {
+                if (!closing)
+                    return;
+                const timer = setTimeout(() => { game.open = false; setClosing(false); refresh(); }, 240);
+                return () => clearTimeout(timer);
+            }, [game, closing]);
             React.useEffect(() => {
                 const img = new Image();
                 imageRef.current = img;
@@ -308,7 +303,10 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                 target.addEventListener('scroll', scroll, true);
                 return () => { resize.disconnect(); target.removeEventListener('scroll', scroll, true); };
             }, [game, game.open, portal]);
-            const close = () => { pause(game); game.open = false; refresh(); };
+            const close = () => { pause(game); setOpening(false); setTap(null); if (reducedMotion())
+                game.open = false;
+            else
+                setClosing(true); refresh(); };
             const open = () => { setOpening(!reducedMotion()); setEntranceActive(false); game.open = true; refresh(); };
             const play = (e) => {
                 start(game);
@@ -387,28 +385,30 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             const { width: panelWidth, height: panelHeight, position, entry } = aboveInput(content.getBoundingClientRect(), composer.getBoundingClientRect(), game.position, LiquidGlass.WIDTH);
             if (panelWidth < 64)
                 return null;
-            const panelStyle = { position: 'absolute', left: position.x, top: position.y, width: panelWidth, height: panelHeight, color: 'inherit', font: 'inherit', borderRadius: LiquidGlass.RADIUS, overflow: 'hidden', pointerEvents: 'auto', isolation: 'isolate' };
+            const panelStyle = { position: 'absolute', left: position.x, top: position.y, width: panelWidth, height: panelHeight, color: 'inherit', font: 'inherit', borderRadius: LiquidGlass.RADIUS, overflow: 'hidden', pointerEvents: closing ? 'none' : 'auto', isolation: 'isolate' };
             const backdrop = glassMap ? `url(#${filterId}) blur(1.5px) saturate(1.08)` : 'blur(1.5px) saturate(1.08)';
             const motionCSS = `
-      @keyframes dsh-snake-reveal{from{clip-path:inset(100% 0 0 0 round 16px)}to{clip-path:inset(0 round 16px)}}
+      @keyframes dsh-snake-reveal{0%{opacity:0;transform:translateY(22px);clip-path:inset(85% 0 0 0 round 16px)}70%{opacity:1;transform:translateY(-2px);clip-path:inset(0 round 16px)}100%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}}
+      @keyframes dsh-snake-fold{0%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}100%{opacity:0;transform:translateY(14px);clip-path:inset(92% 0 0 0 round 16px)}}
       @keyframes dsh-snake-hop{0%,100%{transform:translateY(0)}45%{transform:translateY(-4px)}}
       @keyframes dsh-snake-leave{from{opacity:.72}to{opacity:0}}
       @keyframes dsh-snake-tap{from{transform:scale(.5);opacity:.45}to{transform:scale(4);opacity:0}}
-      .dsh-snake-board{animation:dsh-snake-reveal 180ms cubic-bezier(.2,.8,.2,1)}
+      .dsh-snake-board-opening{animation:dsh-snake-reveal 420ms cubic-bezier(.16,1,.3,1);transform-origin:bottom right}
+      .dsh-snake-board-closing{animation:dsh-snake-fold 240ms cubic-bezier(.4,0,.8,.2) forwards}
       .dsh-snake-entry:focus-visible{box-shadow:0 0 0 1px #4b929766}
       .dsh-snake-entry .dsh-snake-rice{transition:transform 130ms ease-out}
       .dsh-snake-entry:hover .dsh-snake-rice,.dsh-snake-entry:focus-visible .dsh-snake-rice{transform:translateY(-2px)}
-      .dsh-snake-entry-opening{animation:dsh-snake-leave 180ms ease-out}
+      .dsh-snake-entry-opening{animation:dsh-snake-leave 420ms cubic-bezier(.16,1,.3,1)}
       .dsh-snake-entry-opening .dsh-snake-rice{animation:dsh-snake-hop 180ms ease-out}
       .dsh-snake-tap{animation:dsh-snake-tap 180ms ease-out}
       @media(prefers-reduced-motion:reduce){.dsh-snake-board,.dsh-snake-entry,.dsh-snake-entry .dsh-snake-rice,.dsh-snake-tap{animation:none!important;transition:none!important}}
     `;
-            const floating = h('div', { style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6 }, 'aria-label': '贪吃蛇悬浮层' }, h('style', null, motionCSS), game.open ?
-                h('section', { ref: panelRef, className: 'dsh-snake-board', style: panelStyle, onBlur: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) {
+            const floating = h('div', { style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 8 }, 'aria-label': '贪吃蛇悬浮层' }, h('style', null, motionCSS), game.open ?
+                h('section', { ref: panelRef, className: closing ? 'dsh-snake-board dsh-snake-board-closing' : opening ? 'dsh-snake-board dsh-snake-board-opening' : 'dsh-snake-board', style: panelStyle, onBlur: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) {
                         pause(game);
                         refresh();
                     } } }, glassMap && h('svg', { width: 0, height: 0, 'aria-hidden': true, style: { position: 'absolute', pointerEvents: 'none' } }, h('defs', null, h('filter', { id: filterId, filterUnits: 'userSpaceOnUse', x: 0, y: 0, width: glassMap.width, height: glassMap.height, colorInterpolationFilters: 'sRGB' }, h('feImage', { href: glassMap.url, width: glassMap.width, height: glassMap.height, preserveAspectRatio: 'none', result: 'map' }), h('feComponentTransfer', { in: 'map', result: 'neutral-map' }, h('feFuncR', { type: 'linear', slope: 1, intercept: -.5 / 255 }), h('feFuncG', { type: 'linear', slope: 1, intercept: -.5 / 255 })), h('feDisplacementMap', { in: 'SourceGraphic', in2: 'neutral-map', scale: LiquidGlass.SCALE, xChannelSelector: 'R', yChannelSelector: 'G' })))), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', background: 'color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 8%, transparent)', backdropFilter: backdrop, WebkitBackdropFilter: backdrop, boxShadow: 'inset 0 1px 0 #ffffff52, inset 0 -1px 0 #0000000a', borderRadius: 'inherit' } }), h('canvas', { ref: canvasRef, 'data-snake-phase': game.phase, tabIndex: 0, onClick: play, onKeyDown: keyDown, onFocus: () => setFocused(true), onBlur: () => setFocused(false), 'aria-label': '贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出', style: { position: 'relative', display: 'block', width: '100%', height: '100%', cursor: 'pointer', outline: 'none', border: 0, boxShadow: 'none' } }), tap && h('span', { key: tap.key, className: 'dsh-snake-tap', 'aria-hidden': true, onAnimationEnd: () => setTap(null), style: { position: 'absolute', left: tap.x - 6, top: tap.y - 6, width: 12, height: 12, borderRadius: '50%', background: '#4b92971a', boxShadow: 'inset 0 0 0 1px #4b929740', pointerEvents: 'none' } }), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 'inherit', boxShadow: focused ? 'inset 0 0 0 1px #4b929759' : 'none' } }), h('div', { onPointerDown: dragStart, onPointerMove: dragMove, onPointerUp: dragEnd, onPointerCancel: dragEnd, style: { position: 'absolute', left: 0, right: 28, top: 0, height: 18, cursor: 'grab', touchAction: 'none', userSelect: 'none' } }), h('button', { style: { ...subtle, position: 'absolute', right: 3, top: 2, width: 24, height: 24, padding: 0, fontSize: 16, lineHeight: '24px', opacity: .55 }, onClick: close, 'aria-label': '收起贪吃蛇', title: '收起' }, '−')) : null, (!game.open || opening) && h('button', { className: opening ? 'dsh-snake-entry dsh-snake-entry-opening' : 'dsh-snake-entry', tabIndex: opening ? -1 : 0, onAnimationEnd: (e) => { if (e.target === e.currentTarget)
-                    setOpening(false); }, style: { ...subtle, position: 'absolute', left: entry.x, top: entry.y, width: 48, height: 32, padding: 0, pointerEvents: opening ? 'none' : 'auto', opacity: entranceActive ? 1 : .72, outline: 'none', borderRadius: 10 }, onClick: open, onPointerEnter: () => setEntranceActive(true), onPointerLeave: () => setEntranceActive(false), onFocus: () => setEntranceActive(true), onBlur: () => setEntranceActive(false), 'aria-label': '给吃白饭的大肥鱼开饭，打开贪吃蛇', title: '给大肥鱼开饭，点击玩贪吃蛇' }, h('span', { 'aria-hidden': true, style: { position: 'absolute', left: 0, top: 0, width: 24, height: 24, borderRadius: '50%', backgroundImage: `url(${avatarSrc})`, backgroundSize: '55.85px 55.85px', backgroundPosition: '-15px -6.82px' } }), h('span', { className: 'dsh-snake-rice', 'aria-hidden': true, style: { position: 'absolute', right: 0, bottom: 0, fontSize: 22, lineHeight: '24px' } }, '🍚'), entranceActive && h('span', { 'aria-hidden': true, style: { position: 'absolute', right: 52, top: 9, fontSize: 11, whiteSpace: 'nowrap' } }, '开饭啦')));
+                    setOpening(false); }, style: { ...subtle, position: 'absolute', left: entry.x, top: entry.y, width: 56, height: 44, padding: 0, pointerEvents: opening ? 'none' : 'auto', opacity: entranceActive ? 1 : .72, outline: 'none', borderRadius: 10 }, onClick: open, onPointerEnter: () => setEntranceActive(true), onPointerLeave: () => setEntranceActive(false), onFocus: () => setEntranceActive(true), onBlur: () => setEntranceActive(false), 'aria-label': '给吃白饭的大肥鱼开饭，打开贪吃蛇', title: '给大肥鱼开饭，点击玩贪吃蛇' }, h('span', { 'aria-hidden': true, style: { position: 'absolute', left: 2, top: 4, width: 32, height: 32, pointerEvents: 'none', borderRadius: '50%', backgroundImage: `url(${avatarSrc})`, backgroundSize: '74.47px 74.47px', backgroundPosition: '-20px -9.09px' } }), h('span', { className: 'dsh-snake-rice', 'aria-hidden': true, style: { position: 'absolute', right: 0, bottom: 2, pointerEvents: 'none', fontSize: 22, lineHeight: '24px' } }, '🍚'), entranceActive && h('span', { 'aria-hidden': true, style: { position: 'absolute', right: 60, top: 13, pointerEvents: 'none', fontSize: 11, whiteSpace: 'nowrap' } }, '开饭啦')));
             return ReactDOM.createPortal(floating, content);
         }
         return { name: 'dsh-snake', inject: ['slots'], apply(ctx) {

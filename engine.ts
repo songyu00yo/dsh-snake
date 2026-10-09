@@ -33,7 +33,7 @@ namespace SnakeEngine {
     const width=Math.floor(Math.min(widthLimit,Math.max(0,area.width-32),bottom*COLS/ROWS)),height=width*ROWS/COLS;
     return {width,height,bottom,
       position:clampPosition(position||{x:input.right-area.left-width,y:bottom-height},area.width,bottom,width,height),
-      entry:clampPosition({x:input.right-area.left-48,y:input.top-area.top-40},area.width,area.height,48,32)};
+      entry:clampPosition({x:input.right-area.left-56,y:input.top-area.top-52},area.width,area.height,56,44)};
   }
 
   export function foodFor(snake: Point[], random = Math.random): Point | null {
@@ -79,7 +79,6 @@ namespace SnakeEngine {
   export function workChanged(game: Game, working: boolean): void {
     if (working===game.working) return;
     game.working=working;
-    if (working) {if (!game.open) game.played=false; game.open=true; game.finished=false;}
-    else {game.finished=true; if (!game.played) {game.open=false; pause(game);}}
+    game.finished=!working;
   }
 }

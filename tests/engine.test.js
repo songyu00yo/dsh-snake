@@ -20,10 +20,12 @@ test('wraps at walls, self collision, tail cell and restart',()=>{
  g.snake=[[2,2],[3,2],[3,3],[2,3],[1,3]];g.direction=[0,-1];g.turns=[];turn(g,'d');step(g);assert.equal(g.phase,'over');
 });
 test('pause and task lifecycle',()=>{
- const g=createGame();workChanged(g,true);assert(g.open);assert.equal(g.phase,'ready');workChanged(g,false);assert(!g.open);
+ const g=createGame();workChanged(g,true);assert(!g.open);assert.equal(g.phase,'ready');workChanged(g,false);assert(!g.open);
+ g.open=true;workChanged(g,true);workChanged(g,false);assert(g.open);assert.equal(g.phase,'ready');
  workChanged(g,true);start(g);workChanged(g,false);assert(g.open);assert.equal(g.phase,'playing');assert(g.finished);
  pause(g);const snake=structuredClone(g.snake);step(g);assert.deepEqual(g.snake,snake);
  workChanged(g,true);assert(g.open);assert(!g.finished);workChanged(g,false);assert(g.open);
+ g.open=false;pause(g);workChanged(g,true);assert(!g.open);workChanged(g,false);assert(!g.open);
 });
 test('full board wins',()=>{
  const cells=[];for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)cells.push([x,y]);assert.equal(foodFor(cells),null);
@@ -50,7 +52,7 @@ test('board anchors above input and dragging or resizing cannot cover it',()=>{
  const area={left:100,top:50,width:800,height:700},input={right:850,top:600};
  const normal=aboveInput(area,input);
  assert.equal(normal.width,272);assert.equal(normal.height,208);
- assert.deepEqual(normal.position,{x:478,y:330});assert.deepEqual(normal.entry,{x:702,y:510});
+ assert.deepEqual(normal.position,{x:478,y:330});assert.deepEqual(normal.entry,{x:694,y:498});
  const dragged=aboveInput(area,input,{x:2000,y:2000});
  assert(dragged.position.y+dragged.height<=input.top-area.top-12);
  const narrow=aboveInput({left:0,top:0,width:200,height:200},{right:190,top:130},{x:600,y:600});

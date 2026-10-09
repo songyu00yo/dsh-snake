@@ -8,7 +8,7 @@
 
 ## 修改与验证
 
-修改规则时更新对应测试。修改界面时验证聊天输入、暂停、自动展开和收起、浅色与深色主题。运行 `npm run build`、`npm run check` 和 `npm test`。
+修改规则时更新对应测试。修改界面时验证聊天输入、暂停、头像点击展开和手动收起、浅色与深色主题。运行 `npm run build`、`npm run check` 和 `npm test`。
 
 `engine.ts`、`glass.ts` 和 `client.ts` 是源码，`dist/client.js` 是生成文件。修改源码后重新构建。提交源码和生成文件。安装脚本测试使用临时 `DSH_HOME`，不写入真实用户配置。
 

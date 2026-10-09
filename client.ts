@@ -31,10 +31,16 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const [focused,setFocused]=React.useState(false);
     const [entranceActive,setEntranceActive]=React.useState(false);
     const [opening,setOpening]=React.useState(false);
+    const [closing,setClosing]=React.useState(false);
     const [tap,setTap]=React.useState(null) as [{x:number;y:number;key:number}|null,(value:{x:number;y:number;key:number}|null)=>void];
     const reducedMotion=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    React.useEffect(()=>{setOpening(false);setTap(null);setFocused(false);setEntranceActive(false);},[game]);
+    React.useEffect(()=>{setOpening(false);setClosing(false);setTap(null);setFocused(false);setEntranceActive(false);},[game]);
     React.useEffect(()=>{workChanged(game,working);refresh();},[game,working]);
+    React.useEffect(()=>{
+      if(!closing)return;
+      const timer=setTimeout(()=>{game.open=false;setClosing(false);refresh();},240);
+      return ()=>clearTimeout(timer);
+    },[game,closing]);
     React.useEffect(()=>{
       const img=new Image();imageRef.current=img;img.onload=refresh;img.onerror=refresh;img.src=avatarSrc;
       return ()=>{img.onload=null;img.onerror=null;imageRef.current=null;pause(game);};
@@ -90,7 +96,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
       const scroll=()=>refresh();target.addEventListener('scroll',scroll,true);
       return ()=>{resize.disconnect();target.removeEventListener('scroll',scroll,true);};
     },[game,game.open,portal]);
-    const close=()=>{pause(game);game.open=false;refresh();};
+    const close=()=>{pause(game);setOpening(false);setTap(null);if(reducedMotion())game.open=false;else setClosing(true);refresh();};
     const open=()=>{setOpening(!reducedMotion());setEntranceActive(false);game.open=true;refresh();};
     const play=(e: MouseEvent & {currentTarget: HTMLCanvasElement})=>{
       start(game);refresh();
@@ -126,24 +132,26 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const composer=content.querySelector<HTMLElement>('[data-composer-card]');if(!composer)return null;
     const {width:panelWidth,height:panelHeight,position,entry}=aboveInput(content.getBoundingClientRect(),composer.getBoundingClientRect(),game.position,LiquidGlass.WIDTH);
     if(panelWidth<64)return null;
-    const panelStyle={position:'absolute',left:position.x,top:position.y,width:panelWidth,height:panelHeight,color:'inherit',font:'inherit',borderRadius:LiquidGlass.RADIUS,overflow:'hidden',pointerEvents:'auto',isolation:'isolate'};
+    const panelStyle={position:'absolute',left:position.x,top:position.y,width:panelWidth,height:panelHeight,color:'inherit',font:'inherit',borderRadius:LiquidGlass.RADIUS,overflow:'hidden',pointerEvents:closing?'none':'auto',isolation:'isolate'};
     const backdrop=glassMap?`url(#${filterId}) blur(1.5px) saturate(1.08)`:'blur(1.5px) saturate(1.08)';
     const motionCSS=`
-      @keyframes dsh-snake-reveal{from{clip-path:inset(100% 0 0 0 round 16px)}to{clip-path:inset(0 round 16px)}}
+      @keyframes dsh-snake-reveal{0%{opacity:0;transform:translateY(22px);clip-path:inset(85% 0 0 0 round 16px)}70%{opacity:1;transform:translateY(-2px);clip-path:inset(0 round 16px)}100%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}}
+      @keyframes dsh-snake-fold{0%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}100%{opacity:0;transform:translateY(14px);clip-path:inset(92% 0 0 0 round 16px)}}
       @keyframes dsh-snake-hop{0%,100%{transform:translateY(0)}45%{transform:translateY(-4px)}}
       @keyframes dsh-snake-leave{from{opacity:.72}to{opacity:0}}
       @keyframes dsh-snake-tap{from{transform:scale(.5);opacity:.45}to{transform:scale(4);opacity:0}}
-      .dsh-snake-board{animation:dsh-snake-reveal 180ms cubic-bezier(.2,.8,.2,1)}
+      .dsh-snake-board-opening{animation:dsh-snake-reveal 420ms cubic-bezier(.16,1,.3,1);transform-origin:bottom right}
+      .dsh-snake-board-closing{animation:dsh-snake-fold 240ms cubic-bezier(.4,0,.8,.2) forwards}
       .dsh-snake-entry:focus-visible{box-shadow:0 0 0 1px #4b929766}
       .dsh-snake-entry .dsh-snake-rice{transition:transform 130ms ease-out}
       .dsh-snake-entry:hover .dsh-snake-rice,.dsh-snake-entry:focus-visible .dsh-snake-rice{transform:translateY(-2px)}
-      .dsh-snake-entry-opening{animation:dsh-snake-leave 180ms ease-out}
+      .dsh-snake-entry-opening{animation:dsh-snake-leave 420ms cubic-bezier(.16,1,.3,1)}
       .dsh-snake-entry-opening .dsh-snake-rice{animation:dsh-snake-hop 180ms ease-out}
       .dsh-snake-tap{animation:dsh-snake-tap 180ms ease-out}
       @media(prefers-reduced-motion:reduce){.dsh-snake-board,.dsh-snake-entry,.dsh-snake-entry .dsh-snake-rice,.dsh-snake-tap{animation:none!important;transition:none!important}}
     `;
-    const floating=h('div',{style:{position:'absolute',inset:0,pointerEvents:'none',zIndex:6},'aria-label':'贪吃蛇悬浮层'},h('style',null,motionCSS),game.open?
-      h('section',{ref:panelRef,className:'dsh-snake-board',style:panelStyle,onBlur:(e: FocusEvent & {currentTarget: HTMLElement})=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null)){pause(game);refresh();}}},
+    const floating=h('div',{style:{position:'absolute',inset:0,pointerEvents:'none',zIndex:8},'aria-label':'贪吃蛇悬浮层'},h('style',null,motionCSS),game.open?
+      h('section',{ref:panelRef,className:closing?'dsh-snake-board dsh-snake-board-closing':opening?'dsh-snake-board dsh-snake-board-opening':'dsh-snake-board',style:panelStyle,onBlur:(e: FocusEvent & {currentTarget: HTMLElement})=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null)){pause(game);refresh();}}},
         glassMap&&h('svg',{width:0,height:0,'aria-hidden':true,style:{position:'absolute',pointerEvents:'none'}},
           h('defs',null,h('filter',{id:filterId,filterUnits:'userSpaceOnUse',x:0,y:0,width:glassMap.width,height:glassMap.height,colorInterpolationFilters:'sRGB'},
             h('feImage',{href:glassMap.url,width:glassMap.width,height:glassMap.height,preserveAspectRatio:'none',result:'map'}),
@@ -156,10 +164,10 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
         h('div',{'aria-hidden':true,style:{position:'absolute',inset:0,pointerEvents:'none',borderRadius:'inherit',boxShadow:focused?'inset 0 0 0 1px #4b929759':'none'}}),
         h('div',{onPointerDown:dragStart,onPointerMove:dragMove,onPointerUp:dragEnd,onPointerCancel:dragEnd,style:{position:'absolute',left:0,right:28,top:0,height:18,cursor:'grab',touchAction:'none',userSelect:'none'}}),
         h('button',{style:{...subtle,position:'absolute',right:3,top:2,width:24,height:24,padding:0,fontSize:16,lineHeight:'24px',opacity:.55},onClick:close,'aria-label':'收起贪吃蛇',title:'收起'},'−')):null,
-      (!game.open||opening)&&h('button',{className:opening?'dsh-snake-entry dsh-snake-entry-opening':'dsh-snake-entry',tabIndex:opening?-1:0,onAnimationEnd:(e: AnimationEvent & {currentTarget:HTMLElement})=>{if(e.target===e.currentTarget)setOpening(false);},style:{...subtle,position:'absolute',left:entry.x,top:entry.y,width:48,height:32,padding:0,pointerEvents:opening?'none':'auto',opacity:entranceActive?1:.72,outline:'none',borderRadius:10},onClick:open,onPointerEnter:()=>setEntranceActive(true),onPointerLeave:()=>setEntranceActive(false),onFocus:()=>setEntranceActive(true),onBlur:()=>setEntranceActive(false),'aria-label':'给吃白饭的大肥鱼开饭，打开贪吃蛇',title:'给大肥鱼开饭，点击玩贪吃蛇'},
-        h('span',{'aria-hidden':true,style:{position:'absolute',left:0,top:0,width:24,height:24,borderRadius:'50%',backgroundImage:`url(${avatarSrc})`,backgroundSize:'55.85px 55.85px',backgroundPosition:'-15px -6.82px'}}),
-        h('span',{className:'dsh-snake-rice','aria-hidden':true,style:{position:'absolute',right:0,bottom:0,fontSize:22,lineHeight:'24px'}},'🍚'),
-        entranceActive&&h('span',{'aria-hidden':true,style:{position:'absolute',right:52,top:9,fontSize:11,whiteSpace:'nowrap'}},'开饭啦')));
+      (!game.open||opening)&&h('button',{className:opening?'dsh-snake-entry dsh-snake-entry-opening':'dsh-snake-entry',tabIndex:opening?-1:0,onAnimationEnd:(e: AnimationEvent & {currentTarget:HTMLElement})=>{if(e.target===e.currentTarget)setOpening(false);},style:{...subtle,position:'absolute',left:entry.x,top:entry.y,width:56,height:44,padding:0,pointerEvents:opening?'none':'auto',opacity:entranceActive?1:.72,outline:'none',borderRadius:10},onClick:open,onPointerEnter:()=>setEntranceActive(true),onPointerLeave:()=>setEntranceActive(false),onFocus:()=>setEntranceActive(true),onBlur:()=>setEntranceActive(false),'aria-label':'给吃白饭的大肥鱼开饭，打开贪吃蛇',title:'给大肥鱼开饭，点击玩贪吃蛇'},
+        h('span',{'aria-hidden':true,style:{position:'absolute',left:2,top:4,width:32,height:32,pointerEvents:'none',borderRadius:'50%',backgroundImage:`url(${avatarSrc})`,backgroundSize:'74.47px 74.47px',backgroundPosition:'-20px -9.09px'}}),
+        h('span',{className:'dsh-snake-rice','aria-hidden':true,style:{position:'absolute',right:0,bottom:2,pointerEvents:'none',fontSize:22,lineHeight:'24px'}},'🍚'),
+        entranceActive&&h('span',{'aria-hidden':true,style:{position:'absolute',right:60,top:13,pointerEvents:'none',fontSize:11,whiteSpace:'nowrap'}},'开饭啦')));
     return ReactDOM.createPortal(floating,content);
   }
   return {name:'dsh-snake',inject:['slots'],apply(ctx: any){
