@@ -1,4 +1,4 @@
-import {writeSync,readFileSync,writeFileSync,existsSync,mkdirSync,cpSync,rmSync,lstatSync,realpathSync,symlinkSync,renameSync} from 'node:fs';
+import {writeSync,readFileSync,writeFileSync,existsSync,mkdirSync,cpSync,readdirSync,rmSync,lstatSync,realpathSync,symlinkSync,renameSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -17,6 +17,17 @@ const target=join(home,'plugins',profileName,'dsh-snake'),link=join(profile,'nod
 const pending=manifest+'.dsh-snake.tmp';
 const present=path=>{try{lstatSync(path);return true;}catch(e){if(e.code==='ENOENT'||e.code==='ENOTDIR')return false;throw e;}};
 const linkType=process.platform==='win32'?'junction':'dir';
+// Avoid the Windows native copy-file crash on non-ASCII paths.
+const copy=(source,destination)=>{
+  if(process.platform!=='win32')return cpSync(source,destination,{recursive:true});
+  const stat=lstatSync(source);
+  if(stat.isDirectory()){
+    mkdirSync(destination,{recursive:true});
+    for(const name of readdirSync(source))copy(join(source,name),join(destination,name));
+  }else if(stat.isSymbolicLink())cpSync(source,destination);
+  else writeFileSync(destination,readFileSync(source),{mode:stat.mode});
+};
+
 if(!existsSync(manifest))throw Error(profileName==='desktop'?'Open DeepSeek Harness Desktop once, then quit it before installing.':'Run dsh web once to initialize the web profile, then stop the server before installing.');
 const original=readFileSync(manifest,'utf8'),config=JSON.parse(original),mode=lstatSync(manifest).mode;
 for(const value of [config.dependencies,config.dsh,config.dsh?.profile]){
@@ -30,13 +41,13 @@ if(present(pending))throw Error('Profile temporary file is occupied; no files ch
 if(action==='install'&&!existsSync(join(root,'dist','client.js')))throw Error('Run npm run build first');
 trace('validation complete');
 const backup=join(home,'backups','dsh-snake',profileName,new Date().toISOString().replace(/[:.]/g,'-'));
-trace('creating backup directory');mkdirSync(backup,{recursive:true});trace('copying manifest');cpSync(manifest,join(backup,'package.json'));
-if(hadTarget)cpSync(target,join(backup,'plugin'),{recursive:true});
+trace('creating backup directory');mkdirSync(backup,{recursive:true});trace('copying manifest');copy(manifest,join(backup,'package.json'));
+if(hadTarget)copy(target,join(backup,'plugin'));
 trace('backup complete');
 try{
   if(action==='install'){
     const stage=join(backup,'new-plugin');mkdirSync(stage);
-    for(const file of ['package.json','index.js','cordis.patch.yml','dist','assets','scripts','README.md','LICENSE','ASSETS.md'])cpSync(join(root,file),join(stage,file),{recursive:true});
+    for(const file of ['package.json','index.js','cordis.patch.yml','dist','assets','scripts','README.md','LICENSE','ASSETS.md'])copy(join(root,file),join(stage,file));
     trace('staged files copied');
     if(hadTarget)rmSync(target,{recursive:true});
     mkdirSync(join(home,'plugins',profileName),{recursive:true});renameSync(stage,target);
@@ -61,7 +72,7 @@ try{
   try{
     if(present(link))rmSync(link);
     if(present(target))rmSync(target,{recursive:true});
-    if(hadTarget)cpSync(join(backup,'plugin'),target,{recursive:true});
+    if(hadTarget)copy(join(backup,'plugin'),target);
     if(hadLink)symlinkSync(target,link,linkType);
     writeFileSync(pending,original,{mode});renameSync(pending,manifest);
   }catch(restoreError){throw new AggregateError([error,restoreError],`Installation failed; restore from ${backup}`);}
