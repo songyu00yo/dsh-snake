@@ -21,7 +21,7 @@
 
 ## 装
 
-这是首个跨平台 Alpha 版本（`v1.0.0-alpha.1`）。真实的 Windows 与 Web 界面仍需用户实测，自动测试通过不等于全端已经实测过。请从这个版本页下载：[v1.0.0-alpha.1](https://github.com/songyu00yo/dsh-snake/releases/tag/v1.0.0-alpha.1)。
+这是跨平台 Alpha 版本（`v1.0.0-alpha.2`）。真实的 Windows 与 Web 界面仍需用户实测，自动测试通过不等于全端已经实测过。请从这个版本页下载：[v1.0.0-alpha.2](https://github.com/songyu00yo/dsh-snake/releases/tag/v1.0.0-alpha.2)。
 
 稳定版 `0.2.2` 不包含 Web 版，无法安装 Web。
 
@@ -30,13 +30,13 @@
 桌面版一键安装（macOS / Linux）：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/songyu00yo/dsh-snake/v1.0.0-alpha.1/scripts/install.sh | sh -s -- desktop
+curl -fsSL https://raw.githubusercontent.com/songyu00yo/dsh-snake/v1.0.0-alpha.2/scripts/install.sh | sh -s -- desktop
 ```
 
 桌面版一键安装（Windows PowerShell）：
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/songyu00yo/dsh-snake/v1.0.0-alpha.1/scripts/install.ps1'))) -Profile desktop
+& ([scriptblock]::Create((Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/songyu00yo/dsh-snake/v1.0.0-alpha.2/scripts/install.ps1'))) -Profile desktop
 ```
 
 把命令末尾的 `desktop` 换成 `web`，即安装 Web 版。Web 版是能管理服务端的本地或自托管 Harness，插件装到服务端，不是浏览器扩展。Web 首次安装前先运行一次 `dsh web` 初始化，然后停止服务。

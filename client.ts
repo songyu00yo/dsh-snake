@@ -24,6 +24,8 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const game=games.get(sessionId)!, [,refresh]=React.useReducer((n: number)=>n+1,0);
     const [portal,setPortal]=React.useState(null) as [Portal|null,(value: Portal|null|((current: Portal|null)=>Portal|null))=>void];
     const canvasRef=React.useRef(null) as {current: HTMLCanvasElement|null};
+    const inputRef=React.useRef(SnakeEngine.createInput()) as {current: SnakeEngine.InputState};
+    const resetInput=()=>SnakeEngine.resetInput(inputRef.current);
     const imageRef=React.useRef(null) as {current: HTMLImageElement|null};
     const panelRef=React.useRef(null) as {current: HTMLElement|null};
     const closeFrameRef=React.useRef(null) as {current: {transform:string;clip:string;opacity:string}|null};
@@ -36,7 +38,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const [deathGame,setDeathGame]=React.useState(null) as [SnakeEngine.Game|null,(value:SnakeEngine.Game|null)=>void];
     const [tap,setTap]=React.useState(null) as [{x:number;y:number;key:number}|null,(value:{x:number;y:number;key:number}|null)=>void];
     const reducedMotion=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    React.useEffect(()=>{setOpening(false);setClosing(false);setDeathGame(null);setTap(null);setFocused(false);setEntranceActive(false);},[game]);
+    React.useEffect(()=>{resetInput();setOpening(false);setClosing(false);setDeathGame(null);setTap(null);setFocused(false);setEntranceActive(false);},[game]);
     React.useEffect(()=>{workChanged(game,working);refresh();},[game,working]);
     React.useEffect(()=>{
       if(deathGame!==game||game.phase!=='over')return;
@@ -50,11 +52,11 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     },[game,closing]);
     React.useEffect(()=>{
       const img=new Image();imageRef.current=img;img.onload=refresh;img.onerror=refresh;img.src=avatarSrc;
-      return ()=>{img.onload=null;img.onerror=null;imageRef.current=null;pause(game);};
+      return ()=>{img.onload=null;img.onerror=null;imageRef.current=null;pause(game);resetInput();};
     },[game]);
     React.useEffect(()=>{
-      const hide=()=>{if(document.hidden){pause(game);setDeathGame(null);refresh();}};
-      const blur=()=>{pause(game);setDeathGame(null);refresh();};
+      const hide=()=>{if(document.hidden){pause(game);resetInput();setDeathGame(null);refresh();}};
+      const blur=()=>{pause(game);resetInput();setDeathGame(null);refresh();};
       document.addEventListener('visibilitychange',hide);window.addEventListener('blur',blur);
       return ()=>{document.removeEventListener('visibilitychange',hide);window.removeEventListener('blur',blur);};
     },[game]);
@@ -111,7 +113,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const close=()=>{
       const panel=panelRef.current;
       if(panel){const frame=getComputedStyle(panel);closeFrameRef.current={transform:frame.transform,clip:frame.clipPath==='none'?'inset(0 round 16px)':frame.clipPath,opacity:frame.opacity};}
-      pause(game);setOpening(false);setDeathGame(null);setTap(null);
+      pause(game);resetInput();setOpening(false);setDeathGame(null);setTap(null);
       if(reducedMotion())game.open=false;else setClosing(true);refresh();
     };
     const open=()=>{setOpening(!reducedMotion());setEntranceActive(false);game.open=true;refresh();};
@@ -121,16 +123,19 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     };
     const keyDown=(e: KeyEventLike)=>{
       if(e.metaKey||e.ctrlKey||e.altKey||e.isComposing)return;
-      if(!DIRECTIONS[e.key.length===1?e.key.toLowerCase():e.key]&&![' ','Escape'].includes(e.key))return;
+      if(document.activeElement!==canvasRef.current)return;
+      const action=SnakeEngine.inputKey(game,inputRef.current,e.key,e.repeat);
+      if(action==='auto'){setDeathGame(null);refresh();}
+      if(!DIRECTIONS[e.key.length===1?e.key.toLowerCase():e.key]&&![' ','Escape','a','A','b','B'].includes(e.key))return;
       e.preventDefault();e.stopPropagation();e.nativeEvent.stopImmediatePropagation();
-      if(e.key==='Escape'){pause(game);canvasRef.current?.blur();}
-      else if(e.key===' '){if(!e.repeat){if(game.phase==='playing')pause(game);else{setDeathGame(null);start(game);}}}
-      else{setDeathGame(null);if(game.phase==='over'||game.phase==='won')start(game,DIRECTIONS[e.key.length===1?e.key.toLowerCase():e.key]);else if(game.phase==='ready'||game.phase==='paused')start(game);turn(game,e.key);}
+      if(e.key==='Escape'){pause(game);resetInput();canvasRef.current?.blur();}
+      else if(e.key===' '){if(!e.repeat){if(game.phase==='playing'){pause(game);resetInput();}else{setDeathGame(null);start(game);}}}
+      else if(action==='manual'&&DIRECTIONS[e.key.length===1?e.key.toLowerCase():e.key]){setDeathGame(null);if(game.phase==='over'||game.phase==='won')start(game,DIRECTIONS[e.key.length===1?e.key.toLowerCase():e.key]);else if(game.phase==='ready'||game.phase==='paused')start(game);turn(game,e.key);}
       refresh();
     };
     const dragStart=(e: PointerEventLike)=>{
       if(e.target.closest('button'))return;
-      e.preventDefault();e.stopPropagation();pause(game);
+      e.preventDefault();e.stopPropagation();pause(game);resetInput();
       const el=e.currentTarget,panel=panelRef.current;if(!panel)return;el?.setPointerCapture(e.pointerId);
       game.drag={pointer:e.pointerId,x:e.clientX,y:e.clientY,left:panel.offsetLeft,top:panel.offsetTop};refresh();
     };
@@ -210,7 +215,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
       @media(prefers-reduced-motion:reduce){.dsh-snake-board,.dsh-snake-entry,.dsh-snake-entry .dsh-snake-rice,.dsh-snake-avatar,.dsh-snake-tap,.dsh-snake-flip,.dsh-snake-scatter,.dsh-snake-impact{animation:none!important;transition:none!important}.dsh-snake-death-dot{opacity:.2!important;transform:none!important}}
     `;
     const floating=h('div',{style:{position:'absolute',inset:0,pointerEvents:'none',zIndex:8},'aria-label':'贪吃蛇悬浮层'},h('style',null,motionCSS),game.open?
-      h('section',{ref:panelRef,className:closing?'dsh-snake-board dsh-snake-board-closing':opening?'dsh-snake-board dsh-snake-board-opening':'dsh-snake-board',style:panelStyle,onBlur:(e: FocusEvent & {currentTarget: HTMLElement})=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null)){pause(game);refresh();}}},
+      h('section',{ref:panelRef,className:closing?'dsh-snake-board dsh-snake-board-closing':opening?'dsh-snake-board dsh-snake-board-opening':'dsh-snake-board',style:panelStyle,onBlur:(e: FocusEvent & {currentTarget: HTMLElement})=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null)){pause(game);resetInput();refresh();}}},
         glassMap&&h('svg',{width:0,height:0,'aria-hidden':true,style:{position:'absolute',pointerEvents:'none'}},
           h('defs',null,h('filter',{id:filterId,filterUnits:'userSpaceOnUse',x:0,y:0,width:glassMap.width,height:glassMap.height,colorInterpolationFilters:'sRGB'},
             h('feImage',{href:glassMap.url,width:glassMap.width,height:glassMap.height,preserveAspectRatio:'none',result:'map'}),
@@ -218,7 +223,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
               h('feFuncR',{type:'linear',slope:1,intercept:-.5/255}),h('feFuncG',{type:'linear',slope:1,intercept:-.5/255})),
             h('feDisplacementMap',{in:'SourceGraphic',in2:'neutral-map',scale:LiquidGlass.SCALE,xChannelSelector:'R',yChannelSelector:'G'})))),
         h('div',{'aria-hidden':true,style:{position:'absolute',inset:0,pointerEvents:'none',background:'color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 8%, transparent)',backdropFilter:backdrop,WebkitBackdropFilter:backdrop,boxShadow:'inset 0 1px 0 #ffffff52, inset 0 -1px 0 #0000000a',borderRadius:'inherit'}}),
-        h('canvas',{ref:canvasRef,'data-snake-phase':game.phase,tabIndex:0,onClick:play,onKeyDown:keyDown,onFocus:()=>setFocused(true),onBlur:()=>setFocused(false),'aria-label':'贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出',style:{position:'relative',display:'block',width:'100%',height:'100%',cursor:'pointer',outline:'none',border:0,boxShadow:'none'}}),
+        h('canvas',{ref:canvasRef,'data-snake-phase':game.phase,tabIndex:0,onClick:play,onKeyDown:keyDown,onFocus:()=>setFocused(true),onBlur:()=>{pause(game);resetInput();setFocused(false);refresh();},'aria-label':'贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出',style:{position:'relative',display:'block',width:'100%',height:'100%',cursor:'pointer',outline:'none',border:0,boxShadow:'none'}}),
         deathLayer,
         tap&&h('span',{key:tap.key,className:'dsh-snake-tap','aria-hidden':true,onAnimationEnd:()=>setTap(null),style:{position:'absolute',left:tap.x-6,top:tap.y-6,width:12,height:12,borderRadius:'50%',background:'#4b92971a',boxShadow:'inset 0 0 0 1px #4b929740',pointerEvents:'none'}}),
         h('div',{'aria-hidden':true,style:{position:'absolute',inset:0,pointerEvents:'none',borderRadius:'inherit',boxShadow:focused?'inset 0 0 0 1px #4b929759':'none'}}),
