@@ -26,6 +26,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const canvasRef=React.useRef(null) as {current: HTMLCanvasElement|null};
     const imageRef=React.useRef(null) as {current: HTMLImageElement|null};
     const panelRef=React.useRef(null) as {current: HTMLElement|null};
+    const closeFrameRef=React.useRef(null) as {current: {transform:string;clip:string;opacity:string}|null};
     const filterId='dsh-snake-'+React.useId().replace(/[^a-zA-Z0-9_-]/g,'');
     const [glassMap,setGlassMap]=React.useState(null) as [LiquidGlass.Map|null,(value:LiquidGlass.Map|null)=>void];
     const [focused,setFocused]=React.useState(false);
@@ -39,12 +40,12 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     React.useEffect(()=>{workChanged(game,working);refresh();},[game,working]);
     React.useEffect(()=>{
       if(deathGame!==game||game.phase!=='over')return;
-      const timer=setTimeout(()=>setDeathGame(null),420);
+      const timer=setTimeout(()=>setDeathGame(null),560);
       return ()=>clearTimeout(timer);
     },[game,game.phase,deathGame]);
     React.useEffect(()=>{
       if(!closing)return;
-      const timer=setTimeout(()=>{game.open=false;setClosing(false);refresh();},240);
+      const timer=setTimeout(()=>{game.open=false;setClosing(false);refresh();},320);
       return ()=>clearTimeout(timer);
     },[game,closing]);
     React.useEffect(()=>{
@@ -107,7 +108,12 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
       const scroll=()=>refresh();target.addEventListener('scroll',scroll,true);
       return ()=>{resize.disconnect();target.removeEventListener('scroll',scroll,true);};
     },[game,game.open,portal]);
-    const close=()=>{pause(game);setOpening(false);setDeathGame(null);setTap(null);if(reducedMotion())game.open=false;else setClosing(true);refresh();};
+    const close=()=>{
+      const panel=panelRef.current;
+      if(panel){const frame=getComputedStyle(panel);closeFrameRef.current={transform:frame.transform,clip:frame.clipPath==='none'?'inset(0 round 16px)':frame.clipPath,opacity:frame.opacity};}
+      pause(game);setOpening(false);setDeathGame(null);setTap(null);
+      if(reducedMotion())game.open=false;else setClosing(true);refresh();
+    };
     const open=()=>{setOpening(!reducedMotion());setEntranceActive(false);game.open=true;refresh();};
     const play=(e: MouseEvent & {currentTarget: HTMLCanvasElement})=>{
       setDeathGame(null);start(game);refresh();
@@ -143,31 +149,65 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const composer=content.querySelector<HTMLElement>('[data-composer-card]');if(!composer)return null;
     const {width:panelWidth,height:panelHeight,position,entry}=aboveInput(content.getBoundingClientRect(),composer.getBoundingClientRect(),game.position,LiquidGlass.WIDTH);
     if(panelWidth<64)return null;
-    const panelStyle={position:'absolute',left:position.x,top:position.y,width:panelWidth,height:panelHeight,color:'inherit',font:'inherit',borderRadius:LiquidGlass.RADIUS,overflow:'hidden',pointerEvents:closing?'none':'auto',isolation:'isolate'};
+    const anchorX=entry.x+56-position.x-panelWidth,anchorY=entry.y+44-position.y-panelHeight;
+    const panelStyle={'--close-transform':closeFrameRef.current?.transform||'translate(0,0)','--close-clip':closeFrameRef.current?.clip||'inset(0 round 16px)','--close-opacity':closeFrameRef.current?.opacity||'1','--anchor-x':`${anchorX}px`,'--anchor-y':`${anchorY}px`,'--near-x':`${anchorX*.12}px`,'--near-y':`${anchorY*.12}px`,'--settle-x':`${Math.max(-2,Math.min(2,-anchorX*.01))}px`,'--settle-y':`${Math.max(-2,Math.min(2,-anchorY*.01-1))}px`,position:'absolute',left:position.x,top:position.y,width:panelWidth,height:panelHeight,color:'inherit',font:'inherit',borderRadius:LiquidGlass.RADIUS,overflow:'hidden',pointerEvents:closing?'none':'auto',isolation:'isolate'};
     const backdrop=glassMap?`url(#${filterId}) blur(1.5px) saturate(1.08)`:'blur(1.5px) saturate(1.08)';
     const cell=panelWidth/COLS,headSize=cell*.96,deathActive=deathGame===game;
+    const [headX,headY]=game.snake[0];
+    const hitX=(headX+game.direction[0]+COLS)%COLS,hitY=(headY+game.direction[1]+ROWS)%ROWS;
     const deathLayer=game.phase==='over'&&h('div',{'aria-hidden':true,style:{position:'absolute',inset:0,pointerEvents:'none'}},
-      ...game.snake.slice(1).map(([x,y],i)=>h('span',{key:i,className:deathActive?'dsh-snake-death-dot dsh-snake-scatter':'dsh-snake-death-dot',style:{position:'absolute',left:(x+.5)*cell-cell*.31,top:(y+.5)*cell-cell*.31,width:cell*.62,height:cell*.62,borderRadius:'50%',background:'#4b9297',opacity:0,'--scatter-x':`${Math.cos(i*2.399)*cell*.7}px`,'--scatter-y':`${Math.sin(i*2.399)*cell*.7}px`}})),
-      h('span',{className:deathActive?'dsh-snake-death-head dsh-snake-flip':'dsh-snake-death-head',style:{position:'absolute',left:(game.snake[0][0]+.5)*cell-headSize/2,top:(game.snake[0][1]+.5)*cell-headSize/2,width:headSize,height:headSize,borderRadius:'50%',transform:'rotate(180deg)',backgroundColor:imageRef.current?.naturalWidth?'transparent':'#4b9297',backgroundImage:imageRef.current?.naturalWidth?`url(${avatarSrc})`:undefined,backgroundSize:`${headSize*(imageRef.current?.naturalWidth||1024)/440}px ${headSize*(imageRef.current?.naturalHeight||1024)/440}px`,backgroundPosition:`${-275*headSize/440}px ${-125*headSize/440}px`}}));
+      deathActive&&h('span',{className:'dsh-snake-impact',style:{position:'absolute',left:(hitX+.5)*cell-cell*.6,top:(hitY+.5)*cell-cell*.6,width:cell*1.2,height:cell*1.2,borderRadius:'50%',boxShadow:'inset 0 0 0 1px #4b929766',opacity:0}}),
+      ...game.snake.slice(1).map(([x,y],i)=>{
+        const dx=((x-hitX+COLS*1.5)%COLS)-COLS*.5,dy=((y-hitY+ROWS*1.5)%ROWS)-ROWS*.5;
+        const distance=Math.hypot(dx,dy),angle=distance?Math.atan2(dy,dx):i*2.399;
+        const travel=cell*(.38+i%3*.11),driftX=Math.cos(angle)*travel,driftY=Math.sin(angle)*travel;
+        return h('span',{key:i,className:deathActive?'dsh-snake-death-dot dsh-snake-scatter':'dsh-snake-death-dot',style:{position:'absolute',left:(x+.5)*cell-cell*.31,top:(y+.5)*cell-cell*.31,width:cell*.62,height:cell*.62,borderRadius:'50%',background:'#4b9297',opacity:0,animationDelay:`${65+Math.min(85,distance*18)}ms`,'--scatter-x':`${driftX}px`,'--scatter-y':`${driftY}px`,'--arc-x':`${driftX*.6}px`,'--arc-y':`${driftY*.4-cell*.2}px`}});
+      }),
+      h('span',{className:deathActive?'dsh-snake-death-head dsh-snake-flip':'dsh-snake-death-head',style:{position:'absolute',left:(headX+.5)*cell-headSize/2,top:(headY+.5)*cell-headSize/2,width:headSize,height:headSize,borderRadius:'50%',transform:'rotate(180deg)','--recoil-x':`${-game.direction[0]*cell*.08}px`,'--recoil-y':`${-game.direction[1]*cell*.08}px`,'--lift':`${-cell*.34}px`,backgroundColor:imageRef.current?.naturalWidth?'transparent':'#4b9297',backgroundImage:imageRef.current?.naturalWidth?`url(${avatarSrc})`:undefined,backgroundSize:`${headSize*(imageRef.current?.naturalWidth||1024)/440}px ${headSize*(imageRef.current?.naturalHeight||1024)/440}px`,backgroundPosition:`${-275*headSize/440}px ${-125*headSize/440}px`}}));
     const motionCSS=`
-      @keyframes dsh-snake-reveal{0%{opacity:0;transform:translateY(22px);clip-path:inset(85% 0 0 0 round 16px)}70%{opacity:1;transform:translateY(-2px);clip-path:inset(0 round 16px)}100%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}}
-      @keyframes dsh-snake-fold{0%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}100%{opacity:0;transform:translateY(14px);clip-path:inset(92% 0 0 0 round 16px)}}
+      @keyframes dsh-snake-reveal{
+        0%{opacity:0;transform:translate(var(--anchor-x),var(--anchor-y));clip-path:inset(calc(100% - 44px) 0 0 calc(100% - 56px) round 22px);animation-timing-function:cubic-bezier(.16,1,.3,1)}
+        62%{opacity:1;transform:translate(var(--near-x),var(--near-y));clip-path:inset(2% 0 0 2% round 17px);animation-timing-function:cubic-bezier(.2,.8,.3,1)}
+        82%{opacity:1;transform:translate(var(--settle-x),var(--settle-y));clip-path:inset(0 round 16px)}
+        100%{opacity:1;transform:translate(0,0);clip-path:inset(0 round 16px)}
+      }
+      @keyframes dsh-snake-fold{
+        0%{opacity:var(--close-opacity);transform:var(--close-transform);clip-path:var(--close-clip);animation-timing-function:cubic-bezier(.4,0,.3,1)}
+        100%{opacity:0;transform:translate(var(--anchor-x),var(--anchor-y));clip-path:inset(calc(100% - 44px) 0 0 calc(100% - 56px) round 22px)}
+      }
       @keyframes dsh-snake-hop{0%,100%{transform:translateY(0)}45%{transform:translateY(-4px)}}
-      @keyframes dsh-snake-leave{from{opacity:.72}to{opacity:0}}
+      @keyframes dsh-snake-leave{0%{opacity:.72;transform:translateY(0)}26%,100%{opacity:0;transform:translateY(-2px)}}
+      @keyframes dsh-snake-arrive{from{opacity:0;transform:translateY(-2px)}to{transform:translateY(0)}}
       @keyframes dsh-snake-tap{from{transform:scale(.5);opacity:.45}to{transform:scale(4);opacity:0}}
-      @keyframes dsh-snake-flip{0%{transform:translateX(0) rotate(0)}12%{transform:translateX(-2px) rotate(-8deg)}24%{transform:translateX(2px) rotate(8deg)}36%{transform:translateX(0) rotate(0)}100%{transform:translateX(0) rotate(180deg)}}
-      @keyframes dsh-snake-scatter{0%,24%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(var(--scatter-x),var(--scatter-y))}}
-      .dsh-snake-flip{animation:dsh-snake-flip 420ms cubic-bezier(.22,.8,.3,1) both}
-      .dsh-snake-scatter{animation:dsh-snake-scatter 420ms ease-out both}
-      .dsh-snake-board-opening{animation:dsh-snake-reveal 420ms cubic-bezier(.16,1,.3,1);transform-origin:bottom right}
-      .dsh-snake-board-closing{animation:dsh-snake-fold 240ms cubic-bezier(.4,0,.8,.2) forwards}
+      @keyframes dsh-snake-flip{
+        0%{transform:translate(0,0) rotate(0);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+        13%{transform:translate(var(--recoil-x),var(--recoil-y)) rotate(-7deg);animation-timing-function:cubic-bezier(.16,1,.3,1)}
+        48%{transform:translateY(var(--lift)) rotate(118deg);animation-timing-function:cubic-bezier(.5,0,.75,.6)}
+        78%{transform:translateY(0) rotate(190deg);animation-timing-function:cubic-bezier(.2,.8,.3,1)}
+        90%{transform:translateY(-.5px) rotate(177deg)}
+        100%{transform:translateY(0) rotate(180deg)}
+      }
+      @keyframes dsh-snake-scatter{
+        0%,16%{opacity:1;transform:translate(0,0) scale(1)}
+        48%{opacity:.7;transform:translate(var(--arc-x),var(--arc-y)) scale(.94)}
+        100%{opacity:0;transform:translate(var(--scatter-x),var(--scatter-y)) scale(.45)}
+      }
+      @keyframes dsh-snake-impact{0%{opacity:0;transform:scale(.45)}18%{opacity:.65;transform:scale(.7)}100%{opacity:0;transform:scale(1.45)}}
+      .dsh-snake-flip{animation:dsh-snake-flip 560ms both}
+      .dsh-snake-scatter{animation:dsh-snake-scatter 380ms cubic-bezier(.22,.6,.36,1) both}
+      .dsh-snake-impact{animation:dsh-snake-impact 260ms cubic-bezier(.16,1,.3,1) both}
+      .dsh-snake-board-opening{animation:dsh-snake-reveal 520ms both;transform-origin:bottom right}
+      .dsh-snake-board-closing{animation:dsh-snake-fold 320ms forwards}
+      .dsh-snake-entry{animation:dsh-snake-arrive 180ms cubic-bezier(.16,1,.3,1)}
+      .dsh-snake-avatar{transition:transform 160ms cubic-bezier(.16,1,.3,1)}
+      .dsh-snake-entry:active .dsh-snake-avatar{transform:scale(.94)}
       .dsh-snake-entry:focus-visible{box-shadow:0 0 0 1px #4b929766}
       .dsh-snake-entry .dsh-snake-rice{transition:transform 130ms ease-out}
       .dsh-snake-entry:hover .dsh-snake-rice,.dsh-snake-entry:focus-visible .dsh-snake-rice{transform:translateY(-2px)}
-      .dsh-snake-entry-opening{animation:dsh-snake-leave 420ms cubic-bezier(.16,1,.3,1)}
+      .dsh-snake-entry-opening{animation:dsh-snake-leave 520ms cubic-bezier(.16,1,.3,1) both}
       .dsh-snake-entry-opening .dsh-snake-rice{animation:dsh-snake-hop 180ms ease-out}
       .dsh-snake-tap{animation:dsh-snake-tap 180ms ease-out}
-      @media(prefers-reduced-motion:reduce){.dsh-snake-board,.dsh-snake-entry,.dsh-snake-entry .dsh-snake-rice,.dsh-snake-tap,.dsh-snake-flip,.dsh-snake-scatter{animation:none!important;transition:none!important}.dsh-snake-death-dot{opacity:.2!important;transform:none!important}}
+      @media(prefers-reduced-motion:reduce){.dsh-snake-board,.dsh-snake-entry,.dsh-snake-entry .dsh-snake-rice,.dsh-snake-avatar,.dsh-snake-tap,.dsh-snake-flip,.dsh-snake-scatter,.dsh-snake-impact{animation:none!important;transition:none!important}.dsh-snake-death-dot{opacity:.2!important;transform:none!important}}
     `;
     const floating=h('div',{style:{position:'absolute',inset:0,pointerEvents:'none',zIndex:8},'aria-label':'贪吃蛇悬浮层'},h('style',null,motionCSS),game.open?
       h('section',{ref:panelRef,className:closing?'dsh-snake-board dsh-snake-board-closing':opening?'dsh-snake-board dsh-snake-board-opening':'dsh-snake-board',style:panelStyle,onBlur:(e: FocusEvent & {currentTarget: HTMLElement})=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null)){pause(game);refresh();}}},
@@ -185,7 +225,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
         h('div',{onPointerDown:dragStart,onPointerMove:dragMove,onPointerUp:dragEnd,onPointerCancel:dragEnd,style:{position:'absolute',left:0,right:28,top:0,height:18,cursor:'grab',touchAction:'none',userSelect:'none'}}),
         h('button',{style:{...subtle,position:'absolute',right:3,top:2,width:24,height:24,padding:0,fontSize:16,lineHeight:'24px',opacity:.55},onClick:close,'aria-label':'收起贪吃蛇',title:'收起'},'−')):null,
       (!game.open||opening)&&h('button',{className:opening?'dsh-snake-entry dsh-snake-entry-opening':'dsh-snake-entry',tabIndex:opening?-1:0,onAnimationEnd:(e: AnimationEvent & {currentTarget:HTMLElement})=>{if(e.target===e.currentTarget)setOpening(false);},style:{...subtle,position:'absolute',left:entry.x,top:entry.y,width:56,height:44,padding:0,pointerEvents:opening?'none':'auto',opacity:entranceActive?1:.72,outline:'none',borderRadius:10},onClick:open,onPointerEnter:()=>setEntranceActive(true),onPointerLeave:()=>setEntranceActive(false),onFocus:()=>setEntranceActive(true),onBlur:()=>setEntranceActive(false),'aria-label':'给吃白饭的大肥鱼开饭，打开贪吃蛇',title:'给大肥鱼开饭，点击玩贪吃蛇'},
-        h('span',{'aria-hidden':true,style:{position:'absolute',left:2,top:4,width:32,height:32,pointerEvents:'none',borderRadius:'50%',backgroundImage:`url(${avatarSrc})`,backgroundSize:'74.47px 74.47px',backgroundPosition:'-20px -9.09px'}}),
+        h('span',{className:'dsh-snake-avatar','aria-hidden':true,style:{position:'absolute',left:2,top:4,width:32,height:32,pointerEvents:'none',borderRadius:'50%',backgroundImage:`url(${avatarSrc})`,backgroundSize:'74.47px 74.47px',backgroundPosition:'-20px -9.09px'}}),
         h('span',{className:'dsh-snake-rice','aria-hidden':true,style:{position:'absolute',right:0,bottom:2,pointerEvents:'none',fontSize:22,lineHeight:'24px'}},'🍚'),
         entranceActive&&h('span',{'aria-hidden':true,style:{position:'absolute',right:60,top:13,pointerEvents:'none',fontSize:11,whiteSpace:'nowrap'}},'开饭啦')));
     return ReactDOM.createPortal(floating,content);
