@@ -1,10 +1,10 @@
-import {readFileSync,writeFileSync,existsSync,mkdirSync,cpSync,rmSync,lstatSync,realpathSync,symlinkSync,renameSync} from 'node:fs';
+import {writeSync,readFileSync,writeFileSync,existsSync,mkdirSync,cpSync,rmSync,lstatSync,realpathSync,symlinkSync,renameSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
 
-const trace=message=>{if(process.env.DSH_SNAKE_TRACE)console.error(message);};
+const trace=message=>{if(process.env.DSH_SNAKE_TRACE)writeSync(2,message+'\n');};
 const action=process.argv[2];
 if(!['install','uninstall'].includes(action))throw Error('Usage: node scripts/profile.mjs install|uninstall [--profile desktop|web]');
 const {values}=parseArgs({args:process.argv.slice(3),options:{profile:{type:'string',default:'desktop'}}});
@@ -28,8 +28,9 @@ if(hadTarget&&(lstatSync(target).isSymbolicLink()||JSON.parse(readFileSync(join(
 if(hadLink&&(!lstatSync(link).isSymbolicLink()||!hadTarget||realpathSync(link)!==realpathSync(target)))throw Error('Profile entry is occupied; no files changed');
 if(present(pending))throw Error('Profile temporary file is occupied; no files changed');
 if(action==='install'&&!existsSync(join(root,'dist','client.js')))throw Error('Run npm run build first');
+trace('validation complete');
 const backup=join(home,'backups','dsh-snake',profileName,new Date().toISOString().replace(/[:.]/g,'-'));
-mkdirSync(backup,{recursive:true});cpSync(manifest,join(backup,'package.json'));
+trace('creating backup directory');mkdirSync(backup,{recursive:true});trace('copying manifest');cpSync(manifest,join(backup,'package.json'));
 if(hadTarget)cpSync(target,join(backup,'plugin'),{recursive:true});
 trace('backup complete');
 try{
