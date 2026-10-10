@@ -1,6 +1,6 @@
 {
   "name": "dsh-snake",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "给吃白饭的大肥鱼开饭：DeepSeek Harness 输入框上方的点阵贪吃蛇",
   "type": "module",
   "license": "MIT",

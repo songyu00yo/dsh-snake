@@ -177,10 +177,17 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             const [entranceActive, setEntranceActive] = React.useState(false);
             const [opening, setOpening] = React.useState(false);
             const [closing, setClosing] = React.useState(false);
+            const [deathGame, setDeathGame] = React.useState(null);
             const [tap, setTap] = React.useState(null);
             const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            React.useEffect(() => { setOpening(false); setClosing(false); setTap(null); setFocused(false); setEntranceActive(false); }, [game]);
+            React.useEffect(() => { setOpening(false); setClosing(false); setDeathGame(null); setTap(null); setFocused(false); setEntranceActive(false); }, [game]);
             React.useEffect(() => { workChanged(game, working); refresh(); }, [game, working]);
+            React.useEffect(() => {
+                if (deathGame !== game || game.phase !== 'over')
+                    return;
+                const timer = setTimeout(() => setDeathGame(null), 420);
+                return () => clearTimeout(timer);
+            }, [game, game.phase, deathGame]);
             React.useEffect(() => {
                 if (!closing)
                     return;
@@ -198,9 +205,10 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             React.useEffect(() => {
                 const hide = () => { if (document.hidden) {
                     pause(game);
+                    setDeathGame(null);
                     refresh();
                 } };
-                const blur = () => { pause(game); refresh(); };
+                const blur = () => { pause(game); setDeathGame(null); refresh(); };
                 document.addEventListener('visibilitychange', hide);
                 window.addEventListener('blur', blur);
                 return () => { document.removeEventListener('visibilitychange', hide); window.removeEventListener('blur', blur); };
@@ -246,7 +254,8 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                             c.fill();
                         }
                     c.globalAlpha = 1;
-                    game.snake.slice(1).forEach(p => { c.fillStyle = '#4b9297'; c.beginPath(); c.arc((p[0] + .5) * cell, (p[1] + .5) * cell, cell * .31, 0, Math.PI * 2); c.fill(); });
+                    if (game.phase !== 'over')
+                        game.snake.slice(1).forEach(p => { c.fillStyle = '#4b9297'; c.beginPath(); c.arc((p[0] + .5) * cell, (p[1] + .5) * cell, cell * .31, 0, Math.PI * 2); c.fill(); });
                     c.globalAlpha = 1;
                     if (game.food) {
                         c.font = `${cell * .9}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
@@ -254,6 +263,8 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                         c.textBaseline = 'middle';
                         c.fillText('🍚', (game.food[0] + .5) * cell, (game.food[1] + .5) * cell);
                     }
+                    if (game.phase === 'over')
+                        return;
                     const [x, y] = game.snake[0], img = imageRef.current;
                     if (img?.complete && img.naturalWidth) {
                         c.save();
@@ -271,14 +282,24 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                     }
                 };
                 paint();
-                const timer = game.phase === 'playing' ? setInterval(() => { step(game); paint(); refresh(); }, STEP_MS) : null;
+                const timer = game.phase === 'playing' ? setInterval(() => {
+                    step(game);
+                    if (game.phase === 'over') {
+                        if (timer)
+                            clearInterval(timer);
+                        setTap(null);
+                        setDeathGame(reducedMotion() ? null : game);
+                    }
+                    paint();
+                    refresh();
+                }, STEP_MS) : null;
                 const resize = new ResizeObserver(paint);
                 resize.observe(canvas);
                 const theme = new MutationObserver(paint);
                 theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
                 const img = imageRef.current;
                 if (img)
-                    img.onload = paint;
+                    img.onload = () => { paint(); refresh(); };
                 return () => { if (timer)
                     clearInterval(timer); resize.disconnect(); theme.disconnect(); if (img)
                     img.onload = null; };
@@ -303,12 +324,13 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                 target.addEventListener('scroll', scroll, true);
                 return () => { resize.disconnect(); target.removeEventListener('scroll', scroll, true); };
             }, [game, game.open, portal]);
-            const close = () => { pause(game); setOpening(false); setTap(null); if (reducedMotion())
+            const close = () => { pause(game); setOpening(false); setDeathGame(null); setTap(null); if (reducedMotion())
                 game.open = false;
             else
                 setClosing(true); refresh(); };
             const open = () => { setOpening(!reducedMotion()); setEntranceActive(false); game.open = true; refresh(); };
             const play = (e) => {
+                setDeathGame(null);
                 start(game);
                 refresh();
                 if (!reducedMotion()) {
@@ -332,11 +354,14 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                     if (!e.repeat) {
                         if (game.phase === 'playing')
                             pause(game);
-                        else
+                        else {
+                            setDeathGame(null);
                             start(game);
+                        }
                     }
                 }
                 else {
+                    setDeathGame(null);
                     if (game.phase === 'over' || game.phase === 'won')
                         start(game, DIRECTIONS[e.key.length === 1 ? e.key.toLowerCase() : e.key]);
                     else if (game.phase === 'ready' || game.phase === 'paused')
@@ -387,12 +412,18 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                 return null;
             const panelStyle = { position: 'absolute', left: position.x, top: position.y, width: panelWidth, height: panelHeight, color: 'inherit', font: 'inherit', borderRadius: LiquidGlass.RADIUS, overflow: 'hidden', pointerEvents: closing ? 'none' : 'auto', isolation: 'isolate' };
             const backdrop = glassMap ? `url(#${filterId}) blur(1.5px) saturate(1.08)` : 'blur(1.5px) saturate(1.08)';
+            const cell = panelWidth / COLS, headSize = cell * .96, deathActive = deathGame === game;
+            const deathLayer = game.phase === 'over' && h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none' } }, ...game.snake.slice(1).map(([x, y], i) => h('span', { key: i, className: deathActive ? 'dsh-snake-death-dot dsh-snake-scatter' : 'dsh-snake-death-dot', style: { position: 'absolute', left: (x + .5) * cell - cell * .31, top: (y + .5) * cell - cell * .31, width: cell * .62, height: cell * .62, borderRadius: '50%', background: '#4b9297', opacity: 0, '--scatter-x': `${Math.cos(i * 2.399) * cell * .7}px`, '--scatter-y': `${Math.sin(i * 2.399) * cell * .7}px` } })), h('span', { className: deathActive ? 'dsh-snake-death-head dsh-snake-flip' : 'dsh-snake-death-head', style: { position: 'absolute', left: (game.snake[0][0] + .5) * cell - headSize / 2, top: (game.snake[0][1] + .5) * cell - headSize / 2, width: headSize, height: headSize, borderRadius: '50%', transform: 'rotate(180deg)', backgroundColor: imageRef.current?.naturalWidth ? 'transparent' : '#4b9297', backgroundImage: imageRef.current?.naturalWidth ? `url(${avatarSrc})` : undefined, backgroundSize: `${headSize * (imageRef.current?.naturalWidth || 1024) / 440}px ${headSize * (imageRef.current?.naturalHeight || 1024) / 440}px`, backgroundPosition: `${-275 * headSize / 440}px ${-125 * headSize / 440}px` } }));
             const motionCSS = `
       @keyframes dsh-snake-reveal{0%{opacity:0;transform:translateY(22px);clip-path:inset(85% 0 0 0 round 16px)}70%{opacity:1;transform:translateY(-2px);clip-path:inset(0 round 16px)}100%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}}
       @keyframes dsh-snake-fold{0%{opacity:1;transform:translateY(0);clip-path:inset(0 round 16px)}100%{opacity:0;transform:translateY(14px);clip-path:inset(92% 0 0 0 round 16px)}}
       @keyframes dsh-snake-hop{0%,100%{transform:translateY(0)}45%{transform:translateY(-4px)}}
       @keyframes dsh-snake-leave{from{opacity:.72}to{opacity:0}}
       @keyframes dsh-snake-tap{from{transform:scale(.5);opacity:.45}to{transform:scale(4);opacity:0}}
+      @keyframes dsh-snake-flip{0%{transform:translateX(0) rotate(0)}12%{transform:translateX(-2px) rotate(-8deg)}24%{transform:translateX(2px) rotate(8deg)}36%{transform:translateX(0) rotate(0)}100%{transform:translateX(0) rotate(180deg)}}
+      @keyframes dsh-snake-scatter{0%,24%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(var(--scatter-x),var(--scatter-y))}}
+      .dsh-snake-flip{animation:dsh-snake-flip 420ms cubic-bezier(.22,.8,.3,1) both}
+      .dsh-snake-scatter{animation:dsh-snake-scatter 420ms ease-out both}
       .dsh-snake-board-opening{animation:dsh-snake-reveal 420ms cubic-bezier(.16,1,.3,1);transform-origin:bottom right}
       .dsh-snake-board-closing{animation:dsh-snake-fold 240ms cubic-bezier(.4,0,.8,.2) forwards}
       .dsh-snake-entry:focus-visible{box-shadow:0 0 0 1px #4b929766}
@@ -401,13 +432,13 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
       .dsh-snake-entry-opening{animation:dsh-snake-leave 420ms cubic-bezier(.16,1,.3,1)}
       .dsh-snake-entry-opening .dsh-snake-rice{animation:dsh-snake-hop 180ms ease-out}
       .dsh-snake-tap{animation:dsh-snake-tap 180ms ease-out}
-      @media(prefers-reduced-motion:reduce){.dsh-snake-board,.dsh-snake-entry,.dsh-snake-entry .dsh-snake-rice,.dsh-snake-tap{animation:none!important;transition:none!important}}
+      @media(prefers-reduced-motion:reduce){.dsh-snake-board,.dsh-snake-entry,.dsh-snake-entry .dsh-snake-rice,.dsh-snake-tap,.dsh-snake-flip,.dsh-snake-scatter{animation:none!important;transition:none!important}.dsh-snake-death-dot{opacity:.2!important;transform:none!important}}
     `;
             const floating = h('div', { style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 8 }, 'aria-label': '贪吃蛇悬浮层' }, h('style', null, motionCSS), game.open ?
                 h('section', { ref: panelRef, className: closing ? 'dsh-snake-board dsh-snake-board-closing' : opening ? 'dsh-snake-board dsh-snake-board-opening' : 'dsh-snake-board', style: panelStyle, onBlur: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) {
                         pause(game);
                         refresh();
-                    } } }, glassMap && h('svg', { width: 0, height: 0, 'aria-hidden': true, style: { position: 'absolute', pointerEvents: 'none' } }, h('defs', null, h('filter', { id: filterId, filterUnits: 'userSpaceOnUse', x: 0, y: 0, width: glassMap.width, height: glassMap.height, colorInterpolationFilters: 'sRGB' }, h('feImage', { href: glassMap.url, width: glassMap.width, height: glassMap.height, preserveAspectRatio: 'none', result: 'map' }), h('feComponentTransfer', { in: 'map', result: 'neutral-map' }, h('feFuncR', { type: 'linear', slope: 1, intercept: -.5 / 255 }), h('feFuncG', { type: 'linear', slope: 1, intercept: -.5 / 255 })), h('feDisplacementMap', { in: 'SourceGraphic', in2: 'neutral-map', scale: LiquidGlass.SCALE, xChannelSelector: 'R', yChannelSelector: 'G' })))), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', background: 'color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 8%, transparent)', backdropFilter: backdrop, WebkitBackdropFilter: backdrop, boxShadow: 'inset 0 1px 0 #ffffff52, inset 0 -1px 0 #0000000a', borderRadius: 'inherit' } }), h('canvas', { ref: canvasRef, 'data-snake-phase': game.phase, tabIndex: 0, onClick: play, onKeyDown: keyDown, onFocus: () => setFocused(true), onBlur: () => setFocused(false), 'aria-label': '贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出', style: { position: 'relative', display: 'block', width: '100%', height: '100%', cursor: 'pointer', outline: 'none', border: 0, boxShadow: 'none' } }), tap && h('span', { key: tap.key, className: 'dsh-snake-tap', 'aria-hidden': true, onAnimationEnd: () => setTap(null), style: { position: 'absolute', left: tap.x - 6, top: tap.y - 6, width: 12, height: 12, borderRadius: '50%', background: '#4b92971a', boxShadow: 'inset 0 0 0 1px #4b929740', pointerEvents: 'none' } }), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 'inherit', boxShadow: focused ? 'inset 0 0 0 1px #4b929759' : 'none' } }), h('div', { onPointerDown: dragStart, onPointerMove: dragMove, onPointerUp: dragEnd, onPointerCancel: dragEnd, style: { position: 'absolute', left: 0, right: 28, top: 0, height: 18, cursor: 'grab', touchAction: 'none', userSelect: 'none' } }), h('button', { style: { ...subtle, position: 'absolute', right: 3, top: 2, width: 24, height: 24, padding: 0, fontSize: 16, lineHeight: '24px', opacity: .55 }, onClick: close, 'aria-label': '收起贪吃蛇', title: '收起' }, '−')) : null, (!game.open || opening) && h('button', { className: opening ? 'dsh-snake-entry dsh-snake-entry-opening' : 'dsh-snake-entry', tabIndex: opening ? -1 : 0, onAnimationEnd: (e) => { if (e.target === e.currentTarget)
+                    } } }, glassMap && h('svg', { width: 0, height: 0, 'aria-hidden': true, style: { position: 'absolute', pointerEvents: 'none' } }, h('defs', null, h('filter', { id: filterId, filterUnits: 'userSpaceOnUse', x: 0, y: 0, width: glassMap.width, height: glassMap.height, colorInterpolationFilters: 'sRGB' }, h('feImage', { href: glassMap.url, width: glassMap.width, height: glassMap.height, preserveAspectRatio: 'none', result: 'map' }), h('feComponentTransfer', { in: 'map', result: 'neutral-map' }, h('feFuncR', { type: 'linear', slope: 1, intercept: -.5 / 255 }), h('feFuncG', { type: 'linear', slope: 1, intercept: -.5 / 255 })), h('feDisplacementMap', { in: 'SourceGraphic', in2: 'neutral-map', scale: LiquidGlass.SCALE, xChannelSelector: 'R', yChannelSelector: 'G' })))), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', background: 'color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 8%, transparent)', backdropFilter: backdrop, WebkitBackdropFilter: backdrop, boxShadow: 'inset 0 1px 0 #ffffff52, inset 0 -1px 0 #0000000a', borderRadius: 'inherit' } }), h('canvas', { ref: canvasRef, 'data-snake-phase': game.phase, tabIndex: 0, onClick: play, onKeyDown: keyDown, onFocus: () => setFocused(true), onBlur: () => setFocused(false), 'aria-label': '贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出', style: { position: 'relative', display: 'block', width: '100%', height: '100%', cursor: 'pointer', outline: 'none', border: 0, boxShadow: 'none' } }), deathLayer, tap && h('span', { key: tap.key, className: 'dsh-snake-tap', 'aria-hidden': true, onAnimationEnd: () => setTap(null), style: { position: 'absolute', left: tap.x - 6, top: tap.y - 6, width: 12, height: 12, borderRadius: '50%', background: '#4b92971a', boxShadow: 'inset 0 0 0 1px #4b929740', pointerEvents: 'none' } }), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 'inherit', boxShadow: focused ? 'inset 0 0 0 1px #4b929759' : 'none' } }), h('div', { onPointerDown: dragStart, onPointerMove: dragMove, onPointerUp: dragEnd, onPointerCancel: dragEnd, style: { position: 'absolute', left: 0, right: 28, top: 0, height: 18, cursor: 'grab', touchAction: 'none', userSelect: 'none' } }), h('button', { style: { ...subtle, position: 'absolute', right: 3, top: 2, width: 24, height: 24, padding: 0, fontSize: 16, lineHeight: '24px', opacity: .55 }, onClick: close, 'aria-label': '收起贪吃蛇', title: '收起' }, '−')) : null, (!game.open || opening) && h('button', { className: opening ? 'dsh-snake-entry dsh-snake-entry-opening' : 'dsh-snake-entry', tabIndex: opening ? -1 : 0, onAnimationEnd: (e) => { if (e.target === e.currentTarget)
                     setOpening(false); }, style: { ...subtle, position: 'absolute', left: entry.x, top: entry.y, width: 56, height: 44, padding: 0, pointerEvents: opening ? 'none' : 'auto', opacity: entranceActive ? 1 : .72, outline: 'none', borderRadius: 10 }, onClick: open, onPointerEnter: () => setEntranceActive(true), onPointerLeave: () => setEntranceActive(false), onFocus: () => setEntranceActive(true), onBlur: () => setEntranceActive(false), 'aria-label': '给吃白饭的大肥鱼开饭，打开贪吃蛇', title: '给大肥鱼开饭，点击玩贪吃蛇' }, h('span', { 'aria-hidden': true, style: { position: 'absolute', left: 2, top: 4, width: 32, height: 32, pointerEvents: 'none', borderRadius: '50%', backgroundImage: `url(${avatarSrc})`, backgroundSize: '74.47px 74.47px', backgroundPosition: '-20px -9.09px' } }), h('span', { className: 'dsh-snake-rice', 'aria-hidden': true, style: { position: 'absolute', right: 0, bottom: 2, pointerEvents: 'none', fontSize: 22, lineHeight: '24px' } }, '🍚'), entranceActive && h('span', { 'aria-hidden': true, style: { position: 'absolute', right: 60, top: 13, pointerEvents: 'none', fontSize: 11, whiteSpace: 'nowrap' } }, '开饭啦')));
             return ReactDOM.createPortal(floating, content);
         }
