@@ -9,7 +9,7 @@ const linkType=process.platform==='win32'?'junction':'dir';
 function fixture(){
  const home=mkdtempSync(join(tmpdir(),'dsh-snake-空 格-'));
  for(const name of ['desktop','web']){mkdirSync(join(home,'profiles',name),{recursive:true});writeFileSync(join(home,'profiles',name,'package.json'),JSON.stringify(original));}
- return {home,manifest:name=>join(home,'profiles',name,'package.json'),target:name=>join(home,'plugins',name,'dsh-snake'),link:name=>join(home,'profiles',name,'node_modules','dsh-snake'),run:(action,...args)=>spawnSync(process.execPath,['scripts/profile.mjs',action,...args],{env:{...process.env,DSH_HOME:home},encoding:'utf8'}),clean:()=>rmSync(home,{recursive:true,force:true})};
+ return {home,manifest:name=>join(home,'profiles',name,'package.json'),target:name=>join(home,'plugins',name,'dsh-snake'),link:name=>join(home,'profiles',name,'node_modules','dsh-snake'),run:(action,...args)=>spawnSync(process.execPath,['scripts/profile.mjs',action,...args],{env:{...process.env,DSH_HOME:home,DSH_SNAKE_TRACE:'1'},encoding:'utf8'}),clean:()=>rmSync(home,{recursive:true,force:true})};
 }
 for(const name of ['desktop','web'])test(`${name}: repeat install, restore config, backups and conflict protection`,()=>{
  const f=fixture(),args=name==='desktop'?[]:['--profile','web'];

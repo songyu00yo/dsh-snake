@@ -4,6 +4,7 @@ import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
 
+const trace=message=>{if(process.env.DSH_SNAKE_TRACE)console.error(message);};
 const action=process.argv[2];
 if(!['install','uninstall'].includes(action))throw Error('Usage: node scripts/profile.mjs install|uninstall [--profile desktop|web]');
 const {values}=parseArgs({args:process.argv.slice(3),options:{profile:{type:'string',default:'desktop'}}});
@@ -30,23 +31,30 @@ if(action==='install'&&!existsSync(join(root,'dist','client.js')))throw Error('R
 const backup=join(home,'backups','dsh-snake',profileName,new Date().toISOString().replace(/[:.]/g,'-'));
 mkdirSync(backup,{recursive:true});cpSync(manifest,join(backup,'package.json'));
 if(hadTarget)cpSync(target,join(backup,'plugin'),{recursive:true});
+trace('backup complete');
 try{
   if(action==='install'){
     const stage=join(backup,'new-plugin');mkdirSync(stage);
     for(const file of ['package.json','index.js','cordis.patch.yml','dist','assets','scripts','README.md','LICENSE','ASSETS.md'])cpSync(join(root,file),join(stage,file),{recursive:true});
+    trace('staged files copied');
     if(hadTarget)rmSync(target,{recursive:true});
     mkdirSync(join(home,'plugins',profileName),{recursive:true});renameSync(stage,target);
+    trace('target renamed');
     mkdirSync(join(profile,'node_modules'),{recursive:true});
+    trace('creating profile link');
     if(!hadLink)symlinkSync(target,link,linkType);
+    trace('profile link complete');
     config.dependencies??={};config.dependencies['dsh-snake']=`file:../../plugins/${profileName}/dsh-snake`;
     config.dsh??={};config.dsh.profile??={};config.dsh.profile.bundles??=[];
     if(!config.dsh.profile.bundles.includes('dsh-snake'))config.dsh.profile.bundles.push('dsh-snake');
   }else{
     if(hadLink)rmSync(link);
+    trace('staged files copied');
     if(hadTarget)rmSync(target,{recursive:true});
     delete config.dependencies?.['dsh-snake'];
     if(config.dsh?.profile?.bundles)config.dsh.profile.bundles=config.dsh.profile.bundles.filter(name=>name!=='dsh-snake');
   }
+  trace('writing config');
   writeFileSync(pending,JSON.stringify(config,null,2)+'\n',{mode});renameSync(pending,manifest);
 }catch(error){
   try{
