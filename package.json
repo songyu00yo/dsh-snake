@@ -1,6 +1,6 @@
 {
   "name": "dsh-snake",
-  "version": "0.2.2",
+  "version": "1.0.0-alpha.1",
   "description": "给吃白饭的大肥鱼开饭：DeepSeek Harness 输入框上方的点阵贪吃蛇",
   "type": "module",
   "license": "MIT",
@@ -33,7 +33,9 @@
     "test": "node --test",
     "check": "tsc --noEmit && node --check dist/client.js",
     "install:desktop": "node scripts/profile.mjs install",
-    "uninstall:desktop": "node scripts/profile.mjs uninstall"
+    "uninstall:desktop": "node scripts/profile.mjs uninstall",
+    "install:web": "node scripts/profile.mjs install --profile web",
+    "uninstall:web": "node scripts/profile.mjs uninstall --profile web"
   },
   "engines": {
     "node": ">=20"
