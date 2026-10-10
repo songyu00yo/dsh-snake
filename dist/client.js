@@ -29,7 +29,7 @@ var SnakeEngine;
     SnakeEngine.foodFor = foodFor;
     function createGame(direction = [1, 0]) {
         const snake = Array.from({ length: 5 }, (_, i) => [(8 - direction[0] * i + SnakeEngine.COLS) % SnakeEngine.COLS, (6 - direction[1] * i + SnakeEngine.ROWS) % SnakeEngine.ROWS]);
-        return { snake, direction: [...direction], turns: [], food: foodFor(snake), phase: 'ready', open: false, played: false, working: false, finished: false, score: 0 };
+        return { snake, direction: [...direction], turns: [], food: foodFor(snake), phase: 'ready', open: false, played: false, working: false, finished: false, score: 0, auto: false };
     }
     SnakeEngine.createGame = createGame;
     function start(game, direction) {
@@ -59,26 +59,151 @@ var SnakeEngine;
     function step(game, random = Math.random) {
         if (game.phase !== 'playing')
             return;
-        const direction = game.turns.shift() || game.direction;
+        const direction = game.auto ? planDirection(game) : game.turns.shift() || game.direction;
         game.direction = direction;
         const head = [(game.snake[0][0] + direction[0] + SnakeEngine.COLS) % SnakeEngine.COLS, (game.snake[0][1] + direction[1] + SnakeEngine.ROWS) % SnakeEngine.ROWS];
         const eating = game.food && head[0] === game.food[0] && head[1] === game.food[1];
         const body = eating ? game.snake : game.snake.slice(0, -1);
         if (body.some(p => p[0] === head[0] && p[1] === head[1])) {
             game.phase = 'over';
+            game.auto = false;
             return;
         }
         game.snake.unshift(head);
         if (eating) {
             game.score++;
             game.food = foodFor(game.snake, random);
-            if (!game.food)
+            if (!game.food) {
                 game.phase = 'won';
+                game.auto = false;
+            }
         }
         else
             game.snake.pop();
     }
     SnakeEngine.step = step;
+    const ORDER = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    const same = (a, b) => a[0] === b[0] && a[1] === b[1];
+    const cell = (p) => p[1] * SnakeEngine.COLS + p[0];
+    const advance = (p, d) => [(p[0] + d[0] + SnakeEngine.COLS) % SnakeEngine.COLS, (p[1] + d[1] + SnakeEngine.ROWS) % SnakeEngine.ROWS];
+    const ordered = (direction) => [direction, ...ORDER.filter(d => !same(d, direction) && !same(d, [-direction[0], -direction[1]]))];
+    // BFS uses the vacating tail as a candidate; simulation checks its timing.
+    function findRoute(snake, direction, target) {
+        const blocked = new Set(snake.slice(1, -1).map(cell));
+        const seen = new Set([cell(snake[0])]);
+        const queue = [{ point: snake[0], direction, path: [] }];
+        for (let i = 0; i < queue.length; i++) {
+            const node = queue[i];
+            if (same(node.point, target))
+                return node.path;
+            for (const d of ordered(node.direction)) {
+                const point = advance(node.point, d), id = cell(point);
+                if (blocked.has(id) || seen.has(id))
+                    continue;
+                seen.add(id);
+                queue.push({ point, direction: d, path: [...node.path, d] });
+            }
+        }
+        return null;
+    }
+    SnakeEngine.findRoute = findRoute;
+    function simulateRoute(snake, direction, food, path) {
+        const body = snake.map(p => [...p]);
+        let current = direction, rice = food;
+        for (const d of path) {
+            if (same(d, [-current[0], -current[1]]))
+                return null;
+            const head = advance(body[0], d), eating = rice !== null && same(head, rice);
+            if ((eating ? body : body.slice(0, -1)).some(p => same(p, head)))
+                return null;
+            body.unshift(head);
+            if (eating)
+                rice = null;
+            else
+                body.pop();
+            current = d;
+        }
+        return body;
+    }
+    SnakeEngine.simulateRoute = simulateRoute;
+    function space(snake) {
+        const blocked = new Set(snake.slice(1, -1).map(cell)), seen = new Set([cell(snake[0])]), queue = [snake[0]];
+        for (let i = 0; i < queue.length; i++)
+            for (const d of ORDER) {
+                const p = advance(queue[i], d), id = cell(p);
+                if (!blocked.has(id) && !seen.has(id)) {
+                    seen.add(id);
+                    queue.push(p);
+                }
+            }
+        return seen.size;
+    }
+    function planDirection(game) {
+        const { snake, direction, food } = game;
+        const path = food ? findRoute(snake, direction, food) : null;
+        if (path?.length) {
+            const after = simulateRoute(snake, direction, food, path), last = path[path.length - 1];
+            if (after && (after.length === SnakeEngine.COLS * SnakeEngine.ROWS || findRoute(after, last, after[after.length - 1]) !== null))
+                return path[0];
+        }
+        const tail = findRoute(snake, direction, snake[snake.length - 1]);
+        if (tail?.length && simulateRoute(snake, direction, food, tail))
+            return tail[0];
+        let best = direction, largest = -1;
+        for (const d of ordered(direction)) {
+            const after = simulateRoute(snake, direction, food, [d]);
+            if (!after)
+                continue;
+            const area = space(after);
+            if (area > largest) {
+                best = d;
+                largest = area;
+            }
+        }
+        return best;
+    }
+    SnakeEngine.planDirection = planDirection;
+    const SECRET = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a', 'b', 'a'];
+    SnakeEngine.createInput = () => ({ sequence: [], last: 0, exit: null, exitAt: 0 });
+    function resetInput(input) { Object.assign(input, SnakeEngine.createInput()); }
+    SnakeEngine.resetInput = resetInput;
+    // This state belongs to the focused canvas, not the session or a global listener.
+    function inputKey(game, input, key, repeat = false, now = Date.now()) {
+        if (repeat)
+            return game.auto ? 'ignored' : 'manual';
+        const normalized = key.length === 1 ? key.toLowerCase() : key, d = SnakeEngine.DIRECTIONS[normalized];
+        if (game.auto) {
+            input.sequence = [];
+            if (!d) {
+                input.exit = null;
+                return 'ignored';
+            }
+            if (input.exit && same(input.exit, d) && now - input.exitAt <= 600) {
+                game.auto = false;
+                game.turns = [];
+                resetInput(input);
+                return 'manual';
+            }
+            input.exit = d;
+            input.exitAt = now;
+            return 'ignored';
+        }
+        if (now - input.last > 1500)
+            input.sequence = [];
+        input.last = now;
+        input.sequence.push(normalized);
+        while (input.sequence.length && !input.sequence.every((k, i) => k === SECRET[i]))
+            input.sequence.shift();
+        if (input.sequence.length === SECRET.length) {
+            resetInput(input);
+            start(game);
+            game.turns = [];
+            game.auto = true;
+            return 'auto';
+        }
+        return 'manual';
+    }
+    SnakeEngine.inputKey = inputKey;
     function workChanged(game, working) {
         if (working === game.working)
             return;
@@ -169,6 +294,8 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             const game = games.get(sessionId), [, refresh] = React.useReducer((n) => n + 1, 0);
             const [portal, setPortal] = React.useState(null);
             const canvasRef = React.useRef(null);
+            const inputRef = React.useRef(SnakeEngine.createInput());
+            const resetInput = () => SnakeEngine.resetInput(inputRef.current);
             const imageRef = React.useRef(null);
             const panelRef = React.useRef(null);
             const closeFrameRef = React.useRef(null);
@@ -181,7 +308,7 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             const [deathGame, setDeathGame] = React.useState(null);
             const [tap, setTap] = React.useState(null);
             const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            React.useEffect(() => { setOpening(false); setClosing(false); setDeathGame(null); setTap(null); setFocused(false); setEntranceActive(false); }, [game]);
+            React.useEffect(() => { resetInput(); setOpening(false); setClosing(false); setDeathGame(null); setTap(null); setFocused(false); setEntranceActive(false); }, [game]);
             React.useEffect(() => { workChanged(game, working); refresh(); }, [game, working]);
             React.useEffect(() => {
                 if (deathGame !== game || game.phase !== 'over')
@@ -201,15 +328,16 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                 img.onload = refresh;
                 img.onerror = refresh;
                 img.src = avatarSrc;
-                return () => { img.onload = null; img.onerror = null; imageRef.current = null; pause(game); };
+                return () => { img.onload = null; img.onerror = null; imageRef.current = null; pause(game); resetInput(); };
             }, [game]);
             React.useEffect(() => {
                 const hide = () => { if (document.hidden) {
                     pause(game);
+                    resetInput();
                     setDeathGame(null);
                     refresh();
                 } };
-                const blur = () => { pause(game); setDeathGame(null); refresh(); };
+                const blur = () => { pause(game); resetInput(); setDeathGame(null); refresh(); };
                 document.addEventListener('visibilitychange', hide);
                 window.addEventListener('blur', blur);
                 return () => { document.removeEventListener('visibilitychange', hide); window.removeEventListener('blur', blur); };
@@ -332,6 +460,7 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                     closeFrameRef.current = { transform: frame.transform, clip: frame.clipPath === 'none' ? 'inset(0 round 16px)' : frame.clipPath, opacity: frame.opacity };
                 }
                 pause(game);
+                resetInput();
                 setOpening(false);
                 setDeathGame(null);
                 setTap(null);
@@ -354,26 +483,36 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             const keyDown = (e) => {
                 if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing)
                     return;
-                if (!DIRECTIONS[e.key.length === 1 ? e.key.toLowerCase() : e.key] && ![' ', 'Escape'].includes(e.key))
+                if (document.activeElement !== canvasRef.current)
+                    return;
+                const action = SnakeEngine.inputKey(game, inputRef.current, e.key, e.repeat);
+                if (action === 'auto') {
+                    setDeathGame(null);
+                    refresh();
+                }
+                if (!DIRECTIONS[e.key.length === 1 ? e.key.toLowerCase() : e.key] && ![' ', 'Escape', 'a', 'A', 'b', 'B'].includes(e.key))
                     return;
                 e.preventDefault();
                 e.stopPropagation();
                 e.nativeEvent.stopImmediatePropagation();
                 if (e.key === 'Escape') {
                     pause(game);
+                    resetInput();
                     canvasRef.current?.blur();
                 }
                 else if (e.key === ' ') {
                     if (!e.repeat) {
-                        if (game.phase === 'playing')
+                        if (game.phase === 'playing') {
                             pause(game);
+                            resetInput();
+                        }
                         else {
                             setDeathGame(null);
                             start(game);
                         }
                     }
                 }
-                else {
+                else if (action === 'manual' && DIRECTIONS[e.key.length === 1 ? e.key.toLowerCase() : e.key]) {
                     setDeathGame(null);
                     if (game.phase === 'over' || game.phase === 'won')
                         start(game, DIRECTIONS[e.key.length === 1 ? e.key.toLowerCase() : e.key]);
@@ -389,6 +528,7 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                 e.preventDefault();
                 e.stopPropagation();
                 pause(game);
+                resetInput();
                 const el = e.currentTarget, panel = panelRef.current;
                 if (!panel)
                     return;
@@ -483,8 +623,9 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
             const floating = h('div', { style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 8 }, 'aria-label': '贪吃蛇悬浮层' }, h('style', null, motionCSS), game.open ?
                 h('section', { ref: panelRef, className: closing ? 'dsh-snake-board dsh-snake-board-closing' : opening ? 'dsh-snake-board dsh-snake-board-opening' : 'dsh-snake-board', style: panelStyle, onBlur: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) {
                         pause(game);
+                        resetInput();
                         refresh();
-                    } } }, glassMap && h('svg', { width: 0, height: 0, 'aria-hidden': true, style: { position: 'absolute', pointerEvents: 'none' } }, h('defs', null, h('filter', { id: filterId, filterUnits: 'userSpaceOnUse', x: 0, y: 0, width: glassMap.width, height: glassMap.height, colorInterpolationFilters: 'sRGB' }, h('feImage', { href: glassMap.url, width: glassMap.width, height: glassMap.height, preserveAspectRatio: 'none', result: 'map' }), h('feComponentTransfer', { in: 'map', result: 'neutral-map' }, h('feFuncR', { type: 'linear', slope: 1, intercept: -.5 / 255 }), h('feFuncG', { type: 'linear', slope: 1, intercept: -.5 / 255 })), h('feDisplacementMap', { in: 'SourceGraphic', in2: 'neutral-map', scale: LiquidGlass.SCALE, xChannelSelector: 'R', yChannelSelector: 'G' })))), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', background: 'color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 8%, transparent)', backdropFilter: backdrop, WebkitBackdropFilter: backdrop, boxShadow: 'inset 0 1px 0 #ffffff52, inset 0 -1px 0 #0000000a', borderRadius: 'inherit' } }), h('canvas', { ref: canvasRef, 'data-snake-phase': game.phase, tabIndex: 0, onClick: play, onKeyDown: keyDown, onFocus: () => setFocused(true), onBlur: () => setFocused(false), 'aria-label': '贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出', style: { position: 'relative', display: 'block', width: '100%', height: '100%', cursor: 'pointer', outline: 'none', border: 0, boxShadow: 'none' } }), deathLayer, tap && h('span', { key: tap.key, className: 'dsh-snake-tap', 'aria-hidden': true, onAnimationEnd: () => setTap(null), style: { position: 'absolute', left: tap.x - 6, top: tap.y - 6, width: 12, height: 12, borderRadius: '50%', background: '#4b92971a', boxShadow: 'inset 0 0 0 1px #4b929740', pointerEvents: 'none' } }), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 'inherit', boxShadow: focused ? 'inset 0 0 0 1px #4b929759' : 'none' } }), h('div', { onPointerDown: dragStart, onPointerMove: dragMove, onPointerUp: dragEnd, onPointerCancel: dragEnd, style: { position: 'absolute', left: 0, right: 28, top: 0, height: 18, cursor: 'grab', touchAction: 'none', userSelect: 'none' } }), h('button', { style: { ...subtle, position: 'absolute', right: 3, top: 2, width: 24, height: 24, padding: 0, fontSize: 16, lineHeight: '24px', opacity: .55 }, onClick: close, 'aria-label': '收起贪吃蛇', title: '收起' }, '−')) : null, (!game.open || opening) && h('button', { className: opening ? 'dsh-snake-entry dsh-snake-entry-opening' : 'dsh-snake-entry', tabIndex: opening ? -1 : 0, onAnimationEnd: (e) => { if (e.target === e.currentTarget)
+                    } } }, glassMap && h('svg', { width: 0, height: 0, 'aria-hidden': true, style: { position: 'absolute', pointerEvents: 'none' } }, h('defs', null, h('filter', { id: filterId, filterUnits: 'userSpaceOnUse', x: 0, y: 0, width: glassMap.width, height: glassMap.height, colorInterpolationFilters: 'sRGB' }, h('feImage', { href: glassMap.url, width: glassMap.width, height: glassMap.height, preserveAspectRatio: 'none', result: 'map' }), h('feComponentTransfer', { in: 'map', result: 'neutral-map' }, h('feFuncR', { type: 'linear', slope: 1, intercept: -.5 / 255 }), h('feFuncG', { type: 'linear', slope: 1, intercept: -.5 / 255 })), h('feDisplacementMap', { in: 'SourceGraphic', in2: 'neutral-map', scale: LiquidGlass.SCALE, xChannelSelector: 'R', yChannelSelector: 'G' })))), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', background: 'color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 8%, transparent)', backdropFilter: backdrop, WebkitBackdropFilter: backdrop, boxShadow: 'inset 0 1px 0 #ffffff52, inset 0 -1px 0 #0000000a', borderRadius: 'inherit' } }), h('canvas', { ref: canvasRef, 'data-snake-phase': game.phase, tabIndex: 0, onClick: play, onKeyDown: keyDown, onFocus: () => setFocused(true), onBlur: () => { pause(game); resetInput(); setFocused(false); refresh(); }, 'aria-label': '贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出', style: { position: 'relative', display: 'block', width: '100%', height: '100%', cursor: 'pointer', outline: 'none', border: 0, boxShadow: 'none' } }), deathLayer, tap && h('span', { key: tap.key, className: 'dsh-snake-tap', 'aria-hidden': true, onAnimationEnd: () => setTap(null), style: { position: 'absolute', left: tap.x - 6, top: tap.y - 6, width: 12, height: 12, borderRadius: '50%', background: '#4b92971a', boxShadow: 'inset 0 0 0 1px #4b929740', pointerEvents: 'none' } }), h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 'inherit', boxShadow: focused ? 'inset 0 0 0 1px #4b929759' : 'none' } }), h('div', { onPointerDown: dragStart, onPointerMove: dragMove, onPointerUp: dragEnd, onPointerCancel: dragEnd, style: { position: 'absolute', left: 0, right: 28, top: 0, height: 18, cursor: 'grab', touchAction: 'none', userSelect: 'none' } }), h('button', { style: { ...subtle, position: 'absolute', right: 3, top: 2, width: 24, height: 24, padding: 0, fontSize: 16, lineHeight: '24px', opacity: .55 }, onClick: close, 'aria-label': '收起贪吃蛇', title: '收起' }, '−')) : null, (!game.open || opening) && h('button', { className: opening ? 'dsh-snake-entry dsh-snake-entry-opening' : 'dsh-snake-entry', tabIndex: opening ? -1 : 0, onAnimationEnd: (e) => { if (e.target === e.currentTarget)
                     setOpening(false); }, style: { ...subtle, position: 'absolute', left: entry.x, top: entry.y, width: 56, height: 44, padding: 0, pointerEvents: opening ? 'none' : 'auto', opacity: entranceActive ? 1 : .72, outline: 'none', borderRadius: 10 }, onClick: open, onPointerEnter: () => setEntranceActive(true), onPointerLeave: () => setEntranceActive(false), onFocus: () => setEntranceActive(true), onBlur: () => setEntranceActive(false), 'aria-label': '给吃白饭的大肥鱼开饭，打开贪吃蛇', title: '给大肥鱼开饭，点击玩贪吃蛇' }, h('span', { className: 'dsh-snake-avatar', 'aria-hidden': true, style: { position: 'absolute', left: 2, top: 4, width: 32, height: 32, pointerEvents: 'none', borderRadius: '50%', backgroundImage: `url(${avatarSrc})`, backgroundSize: '74.47px 74.47px', backgroundPosition: '-20px -9.09px' } }), h('span', { className: 'dsh-snake-rice', 'aria-hidden': true, style: { position: 'absolute', right: 0, bottom: 2, pointerEvents: 'none', fontSize: 22, lineHeight: '24px' } }, '🍚'), entranceActive && h('span', { 'aria-hidden': true, style: { position: 'absolute', right: 60, top: 13, pointerEvents: 'none', fontSize: 11, whiteSpace: 'nowrap' } }, '开饭啦')));
             return ReactDOM.createPortal(floating, content);
         }
