@@ -1,10 +1,9 @@
-import {writeSync,readFileSync,writeFileSync,existsSync,mkdirSync,cpSync,readdirSync,rmSync,lstatSync,realpathSync,symlinkSync,renameSync} from 'node:fs';
+import {readFileSync,writeFileSync,existsSync,mkdirSync,cpSync,readdirSync,rmSync,lstatSync,realpathSync,symlinkSync,renameSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
 
-const trace=message=>{if(process.env.DSH_SNAKE_TRACE)writeSync(2,message+'\n');};
 const action=process.argv[2];
 if(!['install','uninstall'].includes(action))throw Error('Usage: node scripts/profile.mjs install|uninstall [--profile desktop|web]');
 const {values}=parseArgs({args:process.argv.slice(3),options:{profile:{type:'string',default:'desktop'}}});
@@ -39,34 +38,28 @@ if(hadTarget&&(lstatSync(target).isSymbolicLink()||JSON.parse(readFileSync(join(
 if(hadLink&&(!lstatSync(link).isSymbolicLink()||!hadTarget||realpathSync(link)!==realpathSync(target)))throw Error('Profile entry is occupied; no files changed');
 if(present(pending))throw Error('Profile temporary file is occupied; no files changed');
 if(action==='install'&&!existsSync(join(root,'dist','client.js')))throw Error('Run npm run build first');
-trace('validation complete');
+
 const backup=join(home,'backups','dsh-snake',profileName,new Date().toISOString().replace(/[:.]/g,'-'));
-trace('creating backup directory');mkdirSync(backup,{recursive:true});trace('copying manifest');copy(manifest,join(backup,'package.json'));
+mkdirSync(backup,{recursive:true});copy(manifest,join(backup,'package.json'));
 if(hadTarget)copy(target,join(backup,'plugin'));
-trace('backup complete');
+
 try{
   if(action==='install'){
     const stage=join(backup,'new-plugin');mkdirSync(stage);
     for(const file of ['package.json','index.js','cordis.patch.yml','dist','assets','scripts','README.md','LICENSE','ASSETS.md'])copy(join(root,file),join(stage,file));
-    trace('staged files copied');
     if(hadTarget)rmSync(target,{recursive:true});
     mkdirSync(join(home,'plugins',profileName),{recursive:true});renameSync(stage,target);
-    trace('target renamed');
     mkdirSync(join(profile,'node_modules'),{recursive:true});
-    trace('creating profile link');
     if(!hadLink)symlinkSync(target,link,linkType);
-    trace('profile link complete');
     config.dependencies??={};config.dependencies['dsh-snake']=`file:../../plugins/${profileName}/dsh-snake`;
     config.dsh??={};config.dsh.profile??={};config.dsh.profile.bundles??=[];
     if(!config.dsh.profile.bundles.includes('dsh-snake'))config.dsh.profile.bundles.push('dsh-snake');
   }else{
     if(hadLink)rmSync(link);
-    trace('staged files copied');
     if(hadTarget)rmSync(target,{recursive:true});
     delete config.dependencies?.['dsh-snake'];
     if(config.dsh?.profile?.bundles)config.dsh.profile.bundles=config.dsh.profile.bundles.filter(name=>name!=='dsh-snake');
   }
-  trace('writing config');
   writeFileSync(pending,JSON.stringify(config,null,2)+'\n',{mode});renameSync(pending,manifest);
 }catch(error){
   try{
