@@ -1,5 +1,11 @@
 # dsh-snake
 
+[![Release](https://img.shields.io/github/v/release/songyu00yo/dsh-snake?include_prereleases&style=flat)](https://github.com/songyu00yo/dsh-snake/releases)
+[![License](https://img.shields.io/github/license/songyu00yo/dsh-snake?style=flat)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Web-808080?style=flat)](#兼容)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)](client.ts)
+[![Checks](https://img.shields.io/github/actions/workflow/status/songyu00yo/dsh-snake/check.yml?branch=main&style=flat&label=checks)](https://github.com/songyu00yo/dsh-snake/actions)
+
 给吃白饭的大肥鱼开饭。
 
 
