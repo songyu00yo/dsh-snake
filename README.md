@@ -17,6 +17,12 @@
 
 [Releases](https://github.com/songyu00yo/dsh-snake/releases/latest) 里有最新安装包。
 
+一键安装（macOS / Linux，需要 Node.js 20+，先退出 DeepSeek Harness）：
+
+```sh
+dsh_snake_tmp="$(mktemp -d)" && curl -fL https://github.com/songyu00yo/dsh-snake/releases/download/v0.2.2/dsh-snake-0.2.2.tgz -o "$dsh_snake_tmp/plugin.tgz" && tar -xzf "$dsh_snake_tmp/plugin.tgz" -C "$dsh_snake_tmp" && node "$dsh_snake_tmp/package/scripts/profile.mjs" install
+```
+
 想从源码装的话，跑这三行。
 
 ```sh
