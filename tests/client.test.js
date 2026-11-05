@@ -241,6 +241,11 @@ test('late composer insertion and replacement attach the dock and observe the li
   assert.equal(Number.parseFloat(h.canvas().parentElement.style.top),80);
   assert(h.paints(h.canvas())>0);assert.equal(h.clock.pending().length,1);
   await h.clock.advance(160);assert.equal(h.moves.length,1);
+  await h.flush(()=>h.conversation.target.removeAttribute('data-conversation-content'));
+  assert.equal(h.canvas(),null);assert.equal(h.game.phase,'paused');assert.equal(h.clock.pending().length,0);
+  await h.flush(()=>h.conversation.target.setAttribute('data-conversation-content',''));
+  assert(h.canvas(),'a conversation marker arriving on an existing node must restore the board');
+  assert(h.paints(h.canvas())>0);assert.equal(h.clock.pending().length,0);
 });
 
 test('unmount clears the move timer, canvas observers and global listeners',async t=>{

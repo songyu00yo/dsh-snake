@@ -353,7 +353,7 @@ window.__ModuleLoader__.load({ id: 'dsh-snake', factory(require) {
                 };
                 update();
                 const observer = new MutationObserver(update);
-                observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-conversation-session', 'data-composer-card'] });
+                observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-conversation-content', 'data-conversation-session', 'data-composer-card'] });
                 return () => observer.disconnect();
             }, [sessionId]);
             React.useEffect(() => {

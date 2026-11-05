@@ -68,7 +68,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
         const target=find(),composer=target?.querySelector<HTMLElement>('[data-composer-card]')||null;
         setPortal(current=>target&&composer?current?.sessionId===sessionId&&current.target===target&&current.composer===composer?current:{sessionId,target,composer}:null);
       };
-      update();const observer=new MutationObserver(update);observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-conversation-session','data-composer-card']});
+      update();const observer=new MutationObserver(update);observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-conversation-content','data-conversation-session','data-composer-card']});
       return ()=>observer.disconnect();
     },[sessionId]);
     React.useEffect(()=>{
