@@ -5,7 +5,7 @@ interface Window {
 }
 
 type SessionId = string | number;
-type Portal = {sessionId: SessionId; target: HTMLElement};
+type Portal = {sessionId: SessionId; target: HTMLElement; composer: HTMLElement};
 type DockProps = {
   sessionId: SessionId;
   useSession: <T>(selector: (snapshot: {running?: boolean}) => T) => T;
@@ -15,7 +15,7 @@ type PointerEventLike = {target: Element; currentTarget: HTMLElement; pointerId:
 
 window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
   const React=require('react'), ReactDOM=require('react-dom');
-  const {COLS,ROWS,STEP_MS,DIRECTIONS,clampPosition,aboveInput,createGame,start,pause,turn,step,workChanged}=SnakeEngine;
+  const {COLS,ROWS,speedFor,DIRECTIONS,clampPosition,aboveInput,createGame,start,pause,turn,step,workChanged}=SnakeEngine;
   const avatarSrc: string=/* AVATAR */ null as unknown as string;
   const games=new Map<SessionId,SnakeEngine.Game>(), h=React.createElement;
   function SnakeDock({sessionId, useSession}: DockProps) {
@@ -24,6 +24,8 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const game=games.get(sessionId)!, [,refresh]=React.useReducer((n: number)=>n+1,0);
     const [portal,setPortal]=React.useState(null) as [Portal|null,(value: Portal|null|((current: Portal|null)=>Portal|null))=>void];
     const canvasRef=React.useRef(null) as {current: HTMLCanvasElement|null};
+    const [canvas,setCanvas]=React.useState(null) as [HTMLCanvasElement|null,(value:HTMLCanvasElement|null)=>void];
+    const bindCanvas=React.useCallback((node: HTMLCanvasElement|null)=>{canvasRef.current=node;setCanvas(node);},[]);
     const inputRef=React.useRef(SnakeEngine.createInput()) as {current: SnakeEngine.InputState};
     const resetInput=()=>SnakeEngine.resetInput(inputRef.current);
     const imageRef=React.useRef(null) as {current: HTMLImageElement|null};
@@ -62,16 +64,20 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     },[game]);
     React.useEffect(()=>{
       const find=()=>Array.from(document.querySelectorAll<HTMLElement>('[data-conversation-content]')).find(el=>el.getAttribute('data-conversation-session')===String(sessionId))||null;
-      const update=()=>{const target=find();setPortal(current=>current?.sessionId===sessionId&&current.target===target?current:target?{sessionId,target}:null);};
-      update();const observer=new MutationObserver(update);observer.observe(document.documentElement,{childList:true,subtree:true});
+      const update=()=>{
+        const target=find(),composer=target?.querySelector<HTMLElement>('[data-composer-card]')||null;
+        setPortal(current=>target&&composer?current?.sessionId===sessionId&&current.target===target&&current.composer===composer?current:{sessionId,target,composer}:null);
+      };
+      update();const observer=new MutationObserver(update);observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-conversation-content','data-conversation-session','data-composer-card']});
       return ()=>observer.disconnect();
     },[sessionId]);
     React.useEffect(()=>{
       const panel=panelRef.current;if(!game.open||!panel)return;
       return LiquidGlass.observe(panel,filterId,setGlassMap);
-    },[game,game.open,portal,filterId]);
+    },[game,canvas,portal,filterId]);
     React.useEffect(()=>{
-      const canvas=canvasRef.current;if(!canvas)return;
+      if(!canvas){if(game.phase==='playing'){pause(game);refresh();}resetInput();return;}
+      let active=true,timer:ReturnType<typeof setTimeout>|undefined;
       const paint=()=>{
         const width=canvas.getBoundingClientRect().width;if(!width)return;
         const cell=width/COLS,height=cell*ROWS,ratio=window.devicePixelRatio||1,w=Math.round(width*ratio),hh=Math.round(height*ratio);
@@ -88,16 +94,19 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
         if(img?.complete&&img.naturalWidth){c.save();c.beginPath();c.arc((x+.5)*cell,(y+.5)*cell,cell*.48,0,Math.PI*2);c.clip();c.drawImage(img,275,125,440,440,(x+.5)*cell-cell*.48,(y+.5)*cell-cell*.48,cell*.96,cell*.96);c.restore();}
         else{c.fillStyle='#4b9297';c.beginPath();c.arc((x+.5)*cell,(y+.5)*cell,cell*.38,0,Math.PI*2);c.fill();}
       };
-      paint();const timer:ReturnType<typeof setInterval>|null=game.phase==='playing'?setInterval(()=>{
+      const tick=()=>{
+        if(!active)return;
         step(game);
-        if(game.phase==='over'){if(timer)clearInterval(timer);setTap(null);setDeathGame(reducedMotion()?null:game);}
+        if(game.phase==='over'){setTap(null);setDeathGame(reducedMotion()?null:game);}
         paint();refresh();
-      },STEP_MS):null;
+        if(active&&game.phase==='playing')timer=setTimeout(tick,speedFor(game.score));
+      };
+      paint();if(game.phase==='playing')timer=setTimeout(tick,speedFor(game.score));
       const resize=new ResizeObserver(paint);resize.observe(canvas);
       const theme=new MutationObserver(paint);theme.observe(document.documentElement,{attributes:true,attributeFilter:['class','style','data-theme']});
       const img=imageRef.current;if(img)img.onload=()=>{paint();refresh();};
-      return ()=>{if(timer)clearInterval(timer);resize.disconnect();theme.disconnect();if(img)img.onload=null;};
-    },[game,game.open,game.phase,portal]);
+      return ()=>{active=false;clearTimeout(timer);resize.disconnect();theme.disconnect();if(img)img.onload=null;};
+    },[game,canvas,game.phase,portal]);
     React.useEffect(()=>{
       const target=portal?.target;if(!target)return;
       const resize=new ResizeObserver(()=>{
@@ -106,10 +115,10 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
         refresh();
       });
       resize.observe(target);if(panelRef.current)resize.observe(panelRef.current);
-      const composer=target.querySelector('[data-composer-card]');if(composer)resize.observe(composer);
+      resize.observe(portal.composer);
       const scroll=()=>refresh();target.addEventListener('scroll',scroll,true);
       return ()=>{resize.disconnect();target.removeEventListener('scroll',scroll,true);};
-    },[game,game.open,portal]);
+    },[game,canvas,portal]);
     const close=()=>{
       const panel=panelRef.current;
       if(panel){const frame=getComputedStyle(panel);closeFrameRef.current={transform:frame.transform,clip:frame.clipPath==='none'?'inset(0 round 16px)':frame.clipPath,opacity:frame.opacity};}
@@ -151,7 +160,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
     const subtle={border:0,background:'transparent',color:'inherit',font:'inherit',padding:'2px 0',cursor:'pointer',opacity:.72};
     const content=portal?.sessionId===sessionId&&portal.target.isConnected?portal.target:null;
     if(!content)return null;
-    const composer=content.querySelector<HTMLElement>('[data-composer-card]');if(!composer)return null;
+    const composer=portal!.composer;if(!composer.isConnected)return null;
     const {width:panelWidth,height:panelHeight,position,entry}=aboveInput(content.getBoundingClientRect(),composer.getBoundingClientRect(),game.position,LiquidGlass.WIDTH);
     if(panelWidth<64)return null;
     const anchorX=entry.x+56-position.x-panelWidth,anchorY=entry.y+44-position.y-panelHeight;
@@ -223,7 +232,7 @@ window.__ModuleLoader__.load({id:'dsh-snake', factory(require) {
               h('feFuncR',{type:'linear',slope:1,intercept:-.5/255}),h('feFuncG',{type:'linear',slope:1,intercept:-.5/255})),
             h('feDisplacementMap',{in:'SourceGraphic',in2:'neutral-map',scale:LiquidGlass.SCALE,xChannelSelector:'R',yChannelSelector:'G'})))),
         h('div',{'aria-hidden':true,style:{position:'absolute',inset:0,pointerEvents:'none',background:'color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 8%, transparent)',backdropFilter:backdrop,WebkitBackdropFilter:backdrop,boxShadow:'inset 0 1px 0 #ffffff52, inset 0 -1px 0 #0000000a',borderRadius:'inherit'}}),
-        h('canvas',{ref:canvasRef,'data-snake-phase':game.phase,tabIndex:0,onClick:play,onKeyDown:keyDown,onFocus:()=>setFocused(true),onBlur:()=>{pause(game);resetInput();setFocused(false);refresh();},'aria-label':'贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出',style:{position:'relative',display:'block',width:'100%',height:'100%',cursor:'pointer',outline:'none',border:0,boxShadow:'none'}}),
+        h('canvas',{ref:bindCanvas,'data-snake-phase':game.phase,tabIndex:0,onClick:play,onKeyDown:keyDown,onFocus:()=>setFocused(true),onBlur:()=>{pause(game);resetInput();setFocused(false);refresh();},'aria-label':'贪吃蛇棋盘，点击开始，方向键或 WASD 转向，空格暂停，Esc 退出',style:{position:'relative',display:'block',width:'100%',height:'100%',cursor:'pointer',outline:'none',border:0,boxShadow:'none'}}),
         deathLayer,
         tap&&h('span',{key:tap.key,className:'dsh-snake-tap','aria-hidden':true,onAnimationEnd:()=>setTap(null),style:{position:'absolute',left:tap.x-6,top:tap.y-6,width:12,height:12,borderRadius:'50%',background:'#4b92971a',boxShadow:'inset 0 0 0 1px #4b929740',pointerEvents:'none'}}),
         h('div',{'aria-hidden':true,style:{position:'absolute',inset:0,pointerEvents:'none',borderRadius:'inherit',boxShadow:focused?'inset 0 0 0 1px #4b929759':'none'}}),

@@ -1,6 +1,6 @@
 {
   "name": "dsh-snake",
-  "version": "1.0.0-alpha.2",
+  "version": "1.0.0-alpha.3",
   "description": "给吃白饭的大肥鱼开饭：DeepSeek Harness 输入框上方的点阵贪吃蛇",
   "type": "module",
   "license": "MIT",
@@ -41,6 +41,9 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "jsdom": "26.1.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
     "typescript": "^5.9.3"
   },
   "dsh": {

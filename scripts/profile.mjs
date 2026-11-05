@@ -10,7 +10,8 @@ const {values}=parseArgs({args:process.argv.slice(3),options:{profile:{type:'str
 const profileName=values.profile;
 if(!['desktop','web'].includes(profileName))throw Error('Profile must be desktop or web');
 const root=fileURLToPath(new URL('../',import.meta.url));
-const home=resolve(process.env.DSH_HOME||join(homedir(),'.dsh'));
+const configuredHome=process.env.DSH_HOME?.trim()?process.env.DSH_HOME:join(homedir(),'.dsh');
+const home=resolve(configuredHome==='~'?homedir():/^~[/\\]/.test(configuredHome)?join(homedir(),configuredHome.slice(2)):configuredHome);
 const profile=join(home,'profiles',profileName),manifest=join(profile,'package.json');
 const target=join(home,'plugins',profileName,'dsh-snake'),link=join(profile,'node_modules','dsh-snake');
 const pending=manifest+'.dsh-snake.tmp';
@@ -35,13 +36,16 @@ for(const value of [config.dependencies,config.dsh,config.dsh?.profile]){
 if(config.dsh?.profile?.bundles!=null&&!Array.isArray(config.dsh.profile.bundles))throw Error('Invalid profile bundles; no files changed');
 const hadTarget=present(target),hadLink=present(link);
 if(hadTarget&&(lstatSync(target).isSymbolicLink()||JSON.parse(readFileSync(join(target,'package.json'),'utf8')).name!=='dsh-snake'))throw Error('Target is occupied by a different package');
-if(hadLink&&(!lstatSync(link).isSymbolicLink()||!hadTarget||realpathSync(link)!==realpathSync(target)))throw Error('Profile entry is occupied; no files changed');
+const entryStat=hadLink?lstatSync(link):null,dependency=config.dependencies?.['dsh-snake'];
+const copiedEntry=hadTarget&&entryStat?.isDirectory()&&!entryStat.isSymbolicLink()&&typeof dependency==='string'&&dependency.startsWith('file:')&&realpathSync(resolve(profile,dependency.slice(5)))===realpathSync(target)&&JSON.parse(readFileSync(join(link,'package.json'),'utf8')).name==='dsh-snake';
+if(hadLink&&!copiedEntry&&(!entryStat.isSymbolicLink()||!hadTarget||realpathSync(link)!==realpathSync(target)))throw Error('Profile entry is occupied; no files changed');
 if(present(pending))throw Error('Profile temporary file is occupied; no files changed');
 if(action==='install'&&!existsSync(join(root,'dist','client.js')))throw Error('Run npm run build first');
 
 const backup=join(home,'backups','dsh-snake',profileName,new Date().toISOString().replace(/[:.]/g,'-'));
 mkdirSync(backup,{recursive:true});copy(manifest,join(backup,'package.json'));
 if(hadTarget)copy(target,join(backup,'plugin'));
+if(copiedEntry)copy(link,join(backup,'profile-entry'));
 
 try{
   if(action==='install'){
@@ -50,12 +54,13 @@ try{
     if(hadTarget)rmSync(target,{recursive:true});
     mkdirSync(join(home,'plugins',profileName),{recursive:true});renameSync(stage,target);
     mkdirSync(join(profile,'node_modules'),{recursive:true});
-    if(!hadLink)symlinkSync(target,link,linkType);
-    config.dependencies??={};config.dependencies['dsh-snake']=`file:../../plugins/${profileName}/dsh-snake`;
+    if(copiedEntry)rmSync(link,{recursive:true});
+    if(!hadLink||copiedEntry)symlinkSync(target,link,linkType);
+    config.dependencies??={};config.dependencies['dsh-snake']=`link:../../plugins/${profileName}/dsh-snake`;
     config.dsh??={};config.dsh.profile??={};config.dsh.profile.bundles??=[];
     if(!config.dsh.profile.bundles.includes('dsh-snake'))config.dsh.profile.bundles.push('dsh-snake');
   }else{
-    if(hadLink)rmSync(link);
+    if(hadLink)rmSync(link,{recursive:copiedEntry});
     if(hadTarget)rmSync(target,{recursive:true});
     delete config.dependencies?.['dsh-snake'];
     if(config.dsh?.profile?.bundles)config.dsh.profile.bundles=config.dsh.profile.bundles.filter(name=>name!=='dsh-snake');
@@ -63,10 +68,11 @@ try{
   writeFileSync(pending,JSON.stringify(config,null,2)+'\n',{mode});renameSync(pending,manifest);
 }catch(error){
   try{
-    if(present(link))rmSync(link);
+    if(present(link))rmSync(link,{recursive:copiedEntry});
     if(present(target))rmSync(target,{recursive:true});
     if(hadTarget)copy(join(backup,'plugin'),target);
-    if(hadLink)symlinkSync(target,link,linkType);
+    if(copiedEntry)copy(join(backup,'profile-entry'),link);
+    else if(hadLink)symlinkSync(target,link,linkType);
     writeFileSync(pending,original,{mode});renameSync(pending,manifest);
   }catch(restoreError){throw new AggregateError([error,restoreError],`Installation failed; restore from ${backup}`);}
   throw error;
