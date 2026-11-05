@@ -160,7 +160,7 @@ test('real pnpm migrates a file dependency and preserves link registration acros
   writeFileSync(f.manifest(name),JSON.stringify({name:'test',private:true,dependencies:{},dsh:{profile:{bundles:[]}}}));
   writeFileSync(join(profile,'pnpm-workspace.yaml'),`packages:\n  - .\nnodeLinker: hoisted\nautoInstallPeers: false\nstoreDir: ${JSON.stringify(join(f.temp,'pnpm-store'))}\n`);
   const env={...process.env,DSH_HOME:f.home,XDG_DATA_HOME:join(f.temp,'data'),XDG_CACHE_HOME:join(f.temp,'cache'),XDG_CONFIG_HOME:join(f.temp,'config')};
-  const install=()=>{const result=spawnSync('pnpm',['install','--ignore-scripts','--offline'],{...options,cwd:profile,env});assert.equal(result.status,0,result.stdout+result.stderr);};
+  const install=()=>{const result=spawnSync('pnpm',['install','--ignore-scripts','--offline','--no-frozen-lockfile'],{...options,cwd:profile,env});assert.equal(result.status,0,result.stdout+result.stderr);};
   let result=f.run('install','--profile',name);assert.equal(result.status,0,result.stderr);
   const config=JSON.parse(readFileSync(f.manifest(name)));config.dependencies['dsh-snake']=`file:../../plugins/${name}/dsh-snake`;writeFileSync(f.manifest(name),JSON.stringify(config));
   install();assert(!lstatSync(f.link(name)).isSymbolicLink());
