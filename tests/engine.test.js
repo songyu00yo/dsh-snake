@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 const source=readFileSync(new URL('../engine.ts',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
-const {createGame,start,pause,turn,step,foodFor,workChanged,clampPosition,aboveInput,COLS,ROWS}=new Function(`${compiled}\nreturn SnakeEngine;`)();
+const {createGame,start,pause,turn,step,foodFor,workChanged,clampPosition,aboveInput,speedFor,COLS,ROWS}=new Function(`${compiled}\nreturn SnakeEngine;`)();
 test('movement and rice growth',()=>{
  const g=createGame();start(g);g.food=[9,6];step(g,()=>0);
  assert.equal(g.snake.length,6);assert.equal(g.score,1);assert.deepEqual(g.snake[0],[9,6]);
@@ -58,4 +58,18 @@ test('board anchors above input and dragging or resizing cannot cover it',()=>{
  const narrow=aboveInput({left:0,top:0,width:200,height:200},{right:190,top:130},{x:600,y:600});
  assert(narrow.width<=168);assert(narrow.position.y+narrow.height<=118);
  assert(narrow.position.x+narrow.width<=200);
+});
+
+
+test('rice count controls speed at five-bowl thresholds and caps at 80ms',()=>{
+ for(const [score,delay] of [[0,160],[4,160],[5,140],[9,140],[10,120],[14,120],[15,100],[19,100],[20,80],[21,80],[216,80]])assert.equal(speedFor(score),delay);
+});
+
+test('difficulty is session-local, identical in auto, retained on pause and reset on restart',()=>{
+ for(const auto of [false,true]){
+  const g=createGame(),other=createGame();start(g);g.auto=auto;g.score=4;g.food=[9,6];step(g,()=>0);
+  assert.equal(g.score,5);assert.equal(speedFor(g.score),140);assert.equal(speedFor(other.score),160);
+  pause(g);g.open=false;assert.equal(speedFor(g.score),140);start(g);assert.equal(speedFor(g.score),140);
+  g.phase='over';start(g);assert.equal(speedFor(g.score),160);assert.equal(g.score,0);
+ }
 });

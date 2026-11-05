@@ -19,6 +19,7 @@ namespace SnakeEngine {
   }
 
   export const COLS = 17, ROWS = 13, STEP_MS = 160;
+  export const speedFor=(score: number): number=>Math.max(80,STEP_MS-Math.floor(score/5)*20);
   export const DIRECTIONS: Record<string, Point> = {
     ArrowUp:[0,-1], w:[0,-1], ArrowDown:[0,1], s:[0,1],
     ArrowLeft:[-1,0], a:[-1,0], ArrowRight:[1,0], d:[1,0],
